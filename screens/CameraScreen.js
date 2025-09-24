@@ -7,50 +7,75 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { Camera } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { saveAttendanceRecord } from '../utils/storage';
+import { 
+  initializeFaceAPI, 
+  loadReferenceFace, 
+  verifyFace, 
+  areModelsLoaded 
+} from '../utils/faceVerification';
 
 export default function CameraScreen({ navigation, route }) {
-  const { type, user, onComplete } = route.params;
-  const [hasPermission, setHasPermission] = useState(null);
+  const { type, user } = route.params;
+  const [permission, requestPermission] = useCameraPermissions();
   const [cameraRef, setCameraRef] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [location, setLocation] = useState(null);
   const [photo, setPhoto] = useState(null);
+  const [faceVerificationStatus, setFaceVerificationStatus] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     getPermissions();
+    initializeFaceVerification();
   }, []);
+
+  const initializeFaceVerification = async () => {
+    try {
+      console.log('Checking face verification availability...');
+      const initialized = await initializeFaceAPI();
+      if (initialized) {
+        console.log('Face verification initialized successfully');
+      } else {
+        console.log('Face verification is disabled - app will work without it');
+        // Don't show error alerts since this is expected behavior
+        // The app is designed to work with or without face verification
+      }
+    } catch (error) {
+      console.log('Face verification initialization failed - continuing without it:', error.message);
+      // Don't show error alerts since this is expected behavior
+      // The app is designed to work with or without face verification
+    }
+  };
 
   const getPermissions = async () => {
     try {
-      // Request camera permission
-      const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
+      // Request camera permission if not already granted
+      if (!permission?.granted) {
+        const result = await requestPermission();
+        if (!result.granted) {
+          Alert.alert('Permission Required', 'Camera permission is required to take attendance photos');
+          navigation.goBack();
+          return;
+        }
+      }
       
       // Request location permission
       const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
       
-      if (cameraStatus !== 'granted') {
-        Alert.alert('Permission Required', 'Camera permission is required to take attendance photos');
-        navigation.goBack();
-        return;
-      }
-
       if (locationStatus !== 'granted') {
         Alert.alert(
           'Location Permission', 
           'Location permission is recommended for accurate attendance tracking. You can still proceed without it.',
           [
             { text: 'Cancel', onPress: () => navigation.goBack() },
-            { text: 'Continue', onPress: () => setHasPermission(true) }
+            { text: 'Continue', onPress: () => {} }
           ]
         );
-        return;
       }
-
-      setHasPermission(true);
     } catch (error) {
       console.error('Error getting permissions:', error);
       Alert.alert('Error', 'Failed to get required permissions');
@@ -78,6 +103,9 @@ export default function CameraScreen({ navigation, route }) {
     if (!cameraRef) return;
 
     setIsLoading(true);
+    setIsVerifying(true);
+    setFaceVerificationStatus(null);
+    
     try {
       // Take photo
       const photoResult = await cameraRef.takePictureAsync({
@@ -91,20 +119,81 @@ export default function CameraScreen({ navigation, route }) {
       setPhoto(photoResult.uri);
       setLocation(currentLocation);
 
-      // Show confirmation
-      Alert.alert(
-        'Confirm Attendance',
-        `Are you sure you want to ${type === 'checkin' ? 'check in' : 'check out'}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => saveAttendance(photoResult.uri, currentLocation) }
-        ]
-      );
+      // Perform face verification
+      console.log('Starting face verification...');
+      
+      // Check if models are loaded before attempting verification
+      if (!areModelsLoaded()) {
+        console.log('Face verification is disabled, proceeding with attendance');
+        setFaceVerificationStatus('skipped');
+        
+        // Show a more user-friendly message
+        Alert.alert(
+          'Ready to Submit Attendance',
+          `Photo and location captured successfully.\n\nProceed with ${type === 'checkin' ? 'check in' : 'check out'}?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => {
+              setFaceVerificationStatus(null);
+              setIsLoading(false);
+            }},
+            { text: 'Submit', onPress: () => saveAttendance(photoResult.uri, currentLocation) }
+          ]
+        );
+        setIsVerifying(false);
+        return;
+      }
+
+      const verificationResult = await verifyFace(photoResult.uri, user.username);
+      
+      setIsVerifying(false);
+      
+      if (verificationResult.success) {
+        setFaceVerificationStatus('success');
+        Alert.alert(
+          'Face Verification Successful',
+          `Face verified! Confidence: ${(verificationResult.confidence * 100).toFixed(1)}%\n\nConfirm ${type === 'checkin' ? 'check in' : 'check out'}?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => {
+              setFaceVerificationStatus(null);
+            }},
+            { text: 'Confirm', onPress: () => saveAttendance(photoResult.uri, currentLocation) }
+          ]
+        );
+      } else {
+        setFaceVerificationStatus('failed');
+        Alert.alert(
+          'Face Verification Failed',
+          verificationResult.error || 'Face verification failed. Please try again.',
+          [
+            { text: 'Retry', onPress: () => {
+              setFaceVerificationStatus(null);
+              setIsLoading(false);
+            }},
+            { text: 'Cancel', style: 'cancel', onPress: () => {
+              setFaceVerificationStatus(null);
+              setIsLoading(false);
+            }}
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error taking picture:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    } finally {
-      setIsLoading(false);
+      setIsVerifying(false);
+      setFaceVerificationStatus('error');
+      Alert.alert(
+        'Error', 
+        'Failed to take photo or verify face. Please try again.',
+        [
+          { text: 'Retry', onPress: () => {
+            setFaceVerificationStatus(null);
+            setIsLoading(false);
+          }},
+          { text: 'Cancel', style: 'cancel', onPress: () => {
+            setFaceVerificationStatus(null);
+            setIsLoading(false);
+          }}
+        ]
+      );
     }
   };
 
@@ -128,7 +217,6 @@ export default function CameraScreen({ navigation, route }) {
           { 
             text: 'OK', 
             onPress: () => {
-              if (onComplete) onComplete();
               navigation.goBack();
             }
           }
@@ -140,7 +228,7 @@ export default function CameraScreen({ navigation, route }) {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-900">
         <ActivityIndicator size="large" color="#3b82f6" />
@@ -149,7 +237,7 @@ export default function CameraScreen({ navigation, route }) {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-900 p-6">
         <Ionicons name="camera-off" size={64} color="#ef4444" />
@@ -187,53 +275,73 @@ export default function CameraScreen({ navigation, route }) {
 
       {/* Camera View */}
       <View className="flex-1">
-        <Camera
+        <CameraView
           style={{ flex: 1 }}
-          type={Camera.Constants.Type.front}
+          facing="front"
           ref={(ref) => setCameraRef(ref)}
-        >
-          {/* Overlay */}
-          <View className="flex-1 justify-between p-6">
-            {/* Top overlay */}
-            <View className="bg-black bg-opacity-50 rounded-xl p-4">
-              <Text className="text-white text-center font-semibold">
-                Take a selfie for {type === 'checkin' ? 'check in' : 'check out'}
-              </Text>
-              <Text className="text-gray-300 text-center text-sm mt-1">
-                Make sure your face is clearly visible
+        />
+        
+        {/* Overlay with absolute positioning */}
+        <View className="absolute inset-0 flex-1 justify-between p-6">
+          {/* Top overlay */}
+          <View className="bg-black bg-opacity-50 rounded-xl p-4">
+            <Text className="text-white text-center font-semibold">
+              {type === 'checkin' ? 'Check In' : 'Check Out'} - Photo Required
+            </Text>
+            <Text className="text-gray-300 text-center text-sm mt-1">
+              Take a selfie for attendance verification
+            </Text>
+            <Text className="text-gray-400 text-center text-xs mt-1">
+              User: {user.username}
+            </Text>
+          </View>
+
+          {/* Bottom controls */}
+          <View className="items-center">
+            <View className="bg-black bg-opacity-50 rounded-full p-4 mb-4">
+              <Text className="text-white text-sm text-center">
+                {location ? '📍 Location captured' : '📍 Getting location...'}
               </Text>
             </View>
 
-            {/* Bottom controls */}
-            <View className="items-center">
-              <View className="bg-black bg-opacity-50 rounded-full p-4 mb-4">
+            {/* Face Verification Status */}
+            {faceVerificationStatus && (
+              <View className={`bg-black bg-opacity-50 rounded-full p-4 mb-4 ${
+                faceVerificationStatus === 'success' ? 'bg-green-500 bg-opacity-50' :
+                faceVerificationStatus === 'failed' ? 'bg-red-500 bg-opacity-50' :
+                faceVerificationStatus === 'skipped' ? 'bg-blue-500 bg-opacity-50' :
+                'bg-yellow-500 bg-opacity-50'
+              }`}>
                 <Text className="text-white text-sm text-center">
-                  {location ? '📍 Location captured' : '📍 Getting location...'}
+                  {faceVerificationStatus === 'success' ? '✅ Face verified!' :
+                   faceVerificationStatus === 'failed' ? '❌ Face verification failed' :
+                   faceVerificationStatus === 'skipped' ? '📸 Photo captured' :
+                   '⚠️ Verification error'}
                 </Text>
               </View>
-              
-              <TouchableOpacity
-                className={`w-20 h-20 rounded-full items-center justify-center ${
-                  isLoading ? 'bg-gray-600' : 'bg-white'
-                }`}
-                onPress={takePicture}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="large" color="#3b82f6" />
-                ) : (
-                  <View className="w-16 h-16 bg-primary-500 rounded-full items-center justify-center">
-                    <Ionicons name="camera" size={32} color="white" />
-                  </View>
-                )}
-              </TouchableOpacity>
-              
-              <Text className="text-white text-center mt-4">
-                {isLoading ? 'Processing...' : 'Tap to capture'}
-              </Text>
-            </View>
+            )}
+            
+            <TouchableOpacity
+              className={`w-20 h-20 rounded-full items-center justify-center ${
+                isLoading ? 'bg-gray-600' : 'bg-white'
+              }`}
+              onPress={takePicture}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="large" color="#3b82f6" />
+              ) : (
+                <View className="w-16 h-16 bg-primary-500 rounded-full items-center justify-center">
+                  <Ionicons name="camera" size={32} color="white" />
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            <Text className="text-white text-center mt-4">
+              {isLoading ? (isVerifying ? 'Processing...' : 'Processing...') : 'Tap to capture photo'}
+            </Text>
           </View>
-        </Camera>
+        </View>
       </View>
     </View>
   );

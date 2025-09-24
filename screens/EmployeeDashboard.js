@@ -19,7 +19,14 @@ export default function EmployeeDashboard({ navigation, route }) {
 
   useEffect(() => {
     loadLastRecord();
-  }, []);
+    
+    // Reload data when screen comes into focus (returning from CameraScreen)
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadLastRecord();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const loadLastRecord = async () => {
     try {
@@ -43,16 +50,14 @@ export default function EmployeeDashboard({ navigation, route }) {
   const handleCheckIn = () => {
     navigation.navigate('CameraScreen', { 
       type: 'checkin',
-      user: user,
-      onComplete: loadLastRecord 
+      user: user
     });
   };
 
   const handleCheckOut = () => {
     navigation.navigate('CameraScreen', { 
       type: 'checkout',
-      user: user,
-      onComplete: loadLastRecord 
+      user: user
     });
   };
 

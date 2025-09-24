@@ -10,7 +10,7 @@ A complete attendance tracking application built with React Native and Expo SDK 
 - Session management with AsyncStorage
 
 ### Employee Features
-- **Check In/Check Out**: Mark attendance with photo verification
+- **Check In/Check Out**: Mark attendance with photo capture
 - **Camera Integration**: Take selfie photos for attendance verification
 - **Location Tracking**: GPS coordinates captured with permission
 - **Attendance History**: View personal attendance records with filtering
@@ -91,6 +91,7 @@ Admin: testadmin / testadmin123
   - GPS coordinates (if permission granted)
   - Selfie photo
 - Data stored locally using AsyncStorage
+- Photo capture for attendance verification
 
 ### Camera Integration
 - Uses Expo Camera API for photo capture

@@ -6,27 +6,53 @@ import {
   Alert,
   ScrollView,
   RefreshControl,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getUserAttendanceRecords } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  getEmployeeByUsername, 
+  createWorkModeRequest,
+  getWorkModeRequests 
+} from '../utils/employees';
+import { 
+  getAllWorkModes, 
+  getWorkModeLabel, 
+  getWorkModeColor,
+  getWorkModeIcon 
+} from '../utils/workModes';
 
 export default function EmployeeDashboard({ navigation, route }) {
   const { user } = route.params;
   const { handleLogout } = useAuth();
   const [lastRecord, setLastRecord] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [employee, setEmployee] = useState(null);
+  const [showWorkModeModal, setShowWorkModeModal] = useState(false);
+  const [selectedWorkMode, setSelectedWorkMode] = useState(null);
+  const [requestReason, setRequestReason] = useState('');
+  const [myRequests, setMyRequests] = useState([]);
 
   useEffect(() => {
-    loadLastRecord();
+    loadData();
     
     // Reload data when screen comes into focus (returning from CameraScreen)
     const unsubscribe = navigation.addListener('focus', () => {
-      loadLastRecord();
+      loadData();
     });
 
     return unsubscribe;
   }, [navigation]);
+
+  const loadData = async () => {
+    await Promise.all([
+      loadLastRecord(),
+      loadEmployeeData(),
+      loadMyRequests()
+    ]);
+  };
 
   const loadLastRecord = async () => {
     try {
@@ -41,9 +67,28 @@ export default function EmployeeDashboard({ navigation, route }) {
     }
   };
 
+  const loadEmployeeData = async () => {
+    try {
+      const employeeData = await getEmployeeByUsername(user.username);
+      setEmployee(employeeData);
+    } catch (error) {
+      console.error('Error loading employee data:', error);
+    }
+  };
+
+  const loadMyRequests = async () => {
+    try {
+      const requests = await getWorkModeRequests();
+      const myRequests = requests.filter(req => req.employeeId === user.username);
+      setMyRequests(myRequests);
+    } catch (error) {
+      console.error('Error loading my requests:', error);
+    }
+  };
+
   const onRefresh = async () => {
     setIsRefreshing(true);
-    await loadLastRecord();
+    await loadData();
     setIsRefreshing(false);
   };
 
@@ -59,6 +104,42 @@ export default function EmployeeDashboard({ navigation, route }) {
       type: 'checkout',
       user: user
     });
+  };
+
+  const handleWorkModeRequest = (workMode) => {
+    setSelectedWorkMode(workMode);
+    setShowWorkModeModal(true);
+  };
+
+  const submitWorkModeRequest = async () => {
+    if (!selectedWorkMode || !requestReason.trim()) {
+      Alert.alert('Error', 'Please select a work mode and provide a reason');
+      return;
+    }
+
+    try {
+      const success = await createWorkModeRequest(
+        user.username,
+        selectedWorkMode,
+        requestReason.trim()
+      );
+
+      if (success) {
+        Alert.alert(
+          'Request Submitted',
+          'Your work mode change request has been submitted for admin approval.'
+        );
+        setShowWorkModeModal(false);
+        setSelectedWorkMode(null);
+        setRequestReason('');
+        await loadMyRequests();
+      } else {
+        Alert.alert('Error', 'Failed to submit request');
+      }
+    } catch (error) {
+      console.error('Error submitting work mode request:', error);
+      Alert.alert('Error', 'Failed to submit request');
+    }
   };
 
   const handleViewHistory = () => {
@@ -222,6 +303,102 @@ export default function EmployeeDashboard({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
+        {/* Work Mode Section */}
+        {employee && (
+          <View className="bg-white rounded-2xl p-6 mt-6 shadow-sm">
+            <Text className="text-lg font-semibold text-gray-800 mb-4">
+              Work Mode
+            </Text>
+            
+            {/* Current Work Mode */}
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center">
+                <Ionicons 
+                  name={getWorkModeIcon(employee.workMode)} 
+                  size={20} 
+                  color={getWorkModeColor(employee.workMode)} 
+                />
+                <View className="ml-3">
+                  <Text className="font-medium text-gray-800">
+                    Current: {getWorkModeLabel(employee.workMode)}
+                  </Text>
+                  <Text className="text-sm text-gray-500">
+                    {employee.department} • {employee.position}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Work Mode Request Buttons */}
+            <Text className="text-sm text-gray-600 mb-3">
+              Request a different work mode:
+            </Text>
+            <View className="space-y-2">
+              {getAllWorkModes()
+                .filter(mode => mode.value !== employee.workMode)
+                .map((mode) => (
+                  <TouchableOpacity
+                    key={mode.value}
+                    className="flex-row items-center p-3 bg-gray-50 rounded-lg"
+                    onPress={() => handleWorkModeRequest(mode.value)}
+                  >
+                    <Ionicons 
+                      name={mode.icon} 
+                      size={20} 
+                      color={mode.color} 
+                    />
+                    <View className="ml-3 flex-1">
+                      <Text className="font-medium text-gray-800">
+                        {mode.label}
+                      </Text>
+                      <Text className="text-sm text-gray-500">
+                        {mode.description}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                ))}
+            </View>
+
+            {/* My Requests */}
+            {myRequests.length > 0 && (
+              <View className="mt-4 pt-4 border-t border-gray-200">
+                <Text className="text-sm font-medium text-gray-800 mb-2">
+                  My Requests ({myRequests.length})
+                </Text>
+                {myRequests.slice(0, 2).map((request) => (
+                  <View key={request.id} className="flex-row items-center justify-between py-2">
+                    <View>
+                      <Text className="text-sm text-gray-600">
+                        {getWorkModeLabel(request.requestedMode)}
+                      </Text>
+                      <Text className="text-xs text-gray-500">
+                        {new Date(request.requestedAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <View className={`px-2 py-1 rounded-full ${
+                      request.status === 'pending' ? 'bg-yellow-100' :
+                      request.status === 'approved' ? 'bg-green-100' : 'bg-red-100'
+                    }`}>
+                      <Text className={`text-xs font-medium ${
+                        request.status === 'pending' ? 'text-yellow-800' :
+                        request.status === 'approved' ? 'text-green-800' : 'text-red-800'
+                      }`}>
+                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {myRequests.length > 2 && (
+                  <Text className="text-xs text-gray-500 mt-1">
+                    +{myRequests.length - 2} more requests
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Quick Stats */}
         <View className="bg-white rounded-2xl p-6 mt-6 shadow-sm">
           <Text className="text-lg font-semibold text-gray-800 mb-4">
@@ -243,6 +420,66 @@ export default function EmployeeDashboard({ navigation, route }) {
           </View>
         </View>
       </View>
+
+      {/* Work Mode Request Modal */}
+      <Modal
+        visible={showWorkModeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowWorkModeModal(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
+          <View className="bg-white rounded-xl p-6 mx-4 w-full max-w-sm">
+            <Text className="text-xl font-bold text-gray-800 mb-4">
+              Request Work Mode Change
+            </Text>
+            
+            {selectedWorkMode && (
+              <View className="mb-4">
+                <Text className="text-gray-600 mb-2">
+                  Requesting: <Text className="font-medium">{getWorkModeLabel(selectedWorkMode)}</Text>
+                </Text>
+                <Text className="text-sm text-gray-500">
+                  {getAllWorkModes().find(mode => mode.value === selectedWorkMode)?.description}
+                </Text>
+              </View>
+            )}
+            
+            <Text className="text-gray-800 font-medium mb-2">
+              Reason for request:
+            </Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg p-3 mb-4 text-gray-800"
+              placeholder="Please explain why you need this work mode change..."
+              value={requestReason}
+              onChangeText={setRequestReason}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            
+            <View className="flex-row space-x-3">
+              <TouchableOpacity
+                className="bg-gray-200 rounded-lg p-3 flex-1"
+                onPress={() => {
+                  setShowWorkModeModal(false);
+                  setSelectedWorkMode(null);
+                  setRequestReason('');
+                }}
+              >
+                <Text className="text-center font-medium text-gray-700">Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                className="bg-primary-500 rounded-lg p-3 flex-1"
+                onPress={submitWorkModeRequest}
+              >
+                <Text className="text-center font-medium text-white">Submit Request</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }

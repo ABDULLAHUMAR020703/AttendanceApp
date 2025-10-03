@@ -1,0 +1,308 @@
+// Employee management utilities
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WORK_MODES } from './workModes';
+
+const EMPLOYEES_KEY = 'company_employees';
+const WORK_MODE_REQUESTS_KEY = 'work_mode_requests';
+const WORK_MODE_HISTORY_KEY = 'work_mode_history';
+
+/**
+ * Initialize default employees if none exist
+ */
+export const initializeDefaultEmployees = async () => {
+  try {
+    const existingEmployees = await getEmployees();
+    
+    if (existingEmployees.length === 0) {
+      const defaultEmployees = [
+        {
+          id: 'emp_001',
+          username: 'testuser',
+          name: 'Test User',
+          email: 'testuser@company.com',
+          role: 'employee',
+          workMode: WORK_MODES.IN_OFFICE,
+          department: 'Engineering',
+          position: 'Software Developer',
+          hireDate: '2023-01-15',
+          isActive: true,
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'emp_002',
+          username: 'testadmin',
+          name: 'Test Admin',
+          email: 'admin@company.com',
+          role: 'admin',
+          workMode: WORK_MODES.IN_OFFICE,
+          department: 'Management',
+          position: 'System Administrator',
+          hireDate: '2023-01-01',
+          isActive: true,
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      await AsyncStorage.setItem(EMPLOYEES_KEY, JSON.stringify(defaultEmployees));
+      console.log('Default employees initialized');
+    }
+  } catch (error) {
+    console.error('Error initializing default employees:', error);
+  }
+};
+
+/**
+ * Get all employees
+ * @returns {Promise<Array>} Array of employee objects
+ */
+export const getEmployees = async () => {
+  try {
+    const employees = await AsyncStorage.getItem(EMPLOYEES_KEY);
+    return employees ? JSON.parse(employees) : [];
+  } catch (error) {
+    console.error('Error getting employees:', error);
+    return [];
+  }
+};
+
+/**
+ * Get employee by username
+ * @param {string} username - Username to search for
+ * @returns {Promise<Object|null>} Employee object or null
+ */
+export const getEmployeeByUsername = async (username) => {
+  try {
+    const employees = await getEmployees();
+    return employees.find(emp => emp.username === username) || null;
+  } catch (error) {
+    console.error('Error getting employee by username:', error);
+    return null;
+  }
+};
+
+/**
+ * Update employee work mode
+ * @param {string} employeeId - Employee ID
+ * @param {string} newWorkMode - New work mode
+ * @param {string} changedBy - Username who made the change
+ * @returns {Promise<boolean>} Success status
+ */
+export const updateEmployeeWorkMode = async (employeeId, newWorkMode, changedBy) => {
+  try {
+    const employees = await getEmployees();
+    const employeeIndex = employees.findIndex(emp => emp.id === employeeId);
+    
+    if (employeeIndex === -1) {
+      throw new Error('Employee not found');
+    }
+    
+    const oldWorkMode = employees[employeeIndex].workMode;
+    employees[employeeIndex].workMode = newWorkMode;
+    employees[employeeIndex].lastUpdated = new Date().toISOString();
+    
+    // Save updated employees
+    await AsyncStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
+    
+    // Add to work mode history
+    await addWorkModeHistory(employeeId, oldWorkMode, newWorkMode, changedBy);
+    
+    console.log(`Work mode updated for ${employees[employeeIndex].name}: ${oldWorkMode} → ${newWorkMode}`);
+    return true;
+  } catch (error) {
+    console.error('Error updating employee work mode:', error);
+    return false;
+  }
+};
+
+/**
+ * Add work mode change to history
+ * @param {string} employeeId - Employee ID
+ * @param {string} fromMode - Previous work mode
+ * @param {string} toMode - New work mode
+ * @param {string} changedBy - Username who made the change
+ */
+export const addWorkModeHistory = async (employeeId, fromMode, toMode, changedBy) => {
+  try {
+    const history = await getWorkModeHistory();
+    const historyEntry = {
+      id: Date.now().toString(),
+      employeeId,
+      fromMode,
+      toMode,
+      changedBy,
+      timestamp: new Date().toISOString()
+    };
+    
+    history.push(historyEntry);
+    await AsyncStorage.setItem(WORK_MODE_HISTORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    console.error('Error adding work mode history:', error);
+  }
+};
+
+/**
+ * Get work mode history
+ * @returns {Promise<Array>} Array of work mode change records
+ */
+export const getWorkModeHistory = async () => {
+  try {
+    const history = await AsyncStorage.getItem(WORK_MODE_HISTORY_KEY);
+    return history ? JSON.parse(history) : [];
+  } catch (error) {
+    console.error('Error getting work mode history:', error);
+    return [];
+  }
+};
+
+/**
+ * Get work mode history for specific employee
+ * @param {string} employeeId - Employee ID
+ * @returns {Promise<Array>} Array of work mode changes for employee
+ */
+export const getEmployeeWorkModeHistory = async (employeeId) => {
+  try {
+    const history = await getWorkModeHistory();
+    return history.filter(entry => entry.employeeId === employeeId);
+  } catch (error) {
+    console.error('Error getting employee work mode history:', error);
+    return [];
+  }
+};
+
+/**
+ * Create work mode change request
+ * @param {string} employeeId - Employee ID
+ * @param {string} requestedMode - Requested work mode
+ * @param {string} reason - Reason for request
+ * @returns {Promise<boolean>} Success status
+ */
+export const createWorkModeRequest = async (employeeId, requestedMode, reason) => {
+  try {
+    const requests = await getWorkModeRequests();
+    const request = {
+      id: Date.now().toString(),
+      employeeId,
+      requestedMode,
+      currentMode: null, // Will be filled when processing
+      reason,
+      status: 'pending', // pending, approved, rejected
+      requestedAt: new Date().toISOString(),
+      processedAt: null,
+      processedBy: null,
+      adminNotes: null
+    };
+    
+    requests.push(request);
+    await AsyncStorage.setItem(WORK_MODE_REQUESTS_KEY, JSON.stringify(requests));
+    
+    console.log(`Work mode request created for employee ${employeeId}: ${requestedMode}`);
+    return true;
+  } catch (error) {
+    console.error('Error creating work mode request:', error);
+    return false;
+  }
+};
+
+/**
+ * Get all work mode requests
+ * @returns {Promise<Array>} Array of work mode requests
+ */
+export const getWorkModeRequests = async () => {
+  try {
+    const requests = await AsyncStorage.getItem(WORK_MODE_REQUESTS_KEY);
+    return requests ? JSON.parse(requests) : [];
+  } catch (error) {
+    console.error('Error getting work mode requests:', error);
+    return [];
+  }
+};
+
+/**
+ * Get pending work mode requests
+ * @returns {Promise<Array>} Array of pending requests
+ */
+export const getPendingWorkModeRequests = async () => {
+  try {
+    const requests = await getWorkModeRequests();
+    return requests.filter(request => request.status === 'pending');
+  } catch (error) {
+    console.error('Error getting pending work mode requests:', error);
+    return [];
+  }
+};
+
+/**
+ * Process work mode request (approve or reject)
+ * @param {string} requestId - Request ID
+ * @param {string} status - 'approved' or 'rejected'
+ * @param {string} processedBy - Username of admin who processed
+ * @param {string} adminNotes - Admin notes
+ * @returns {Promise<boolean>} Success status
+ */
+export const processWorkModeRequest = async (requestId, status, processedBy, adminNotes = '') => {
+  try {
+    const requests = await getWorkModeRequests();
+    const requestIndex = requests.findIndex(req => req.id === requestId);
+    
+    if (requestIndex === -1) {
+      throw new Error('Request not found');
+    }
+    
+    const request = requests[requestIndex];
+    request.status = status;
+    request.processedAt = new Date().toISOString();
+    request.processedBy = processedBy;
+    request.adminNotes = adminNotes;
+    
+    // If approved, update employee work mode
+    if (status === 'approved') {
+      const employee = await getEmployeeByUsername(request.employeeId);
+      if (employee) {
+        await updateEmployeeWorkMode(employee.id, request.requestedMode, processedBy);
+      }
+    }
+    
+    await AsyncStorage.setItem(WORK_MODE_REQUESTS_KEY, JSON.stringify(requests));
+    
+    console.log(`Work mode request ${requestId} ${status} by ${processedBy}`);
+    return true;
+  } catch (error) {
+    console.error('Error processing work mode request:', error);
+    return false;
+  }
+};
+
+/**
+ * Get work mode statistics
+ * @returns {Promise<Object>} Statistics object
+ */
+export const getWorkModeStatistics = async () => {
+  try {
+    const employees = await getEmployees();
+    const stats = {
+      total: employees.length,
+      inOffice: 0,
+      semiRemote: 0,
+      fullyRemote: 0
+    };
+    
+    employees.forEach(emp => {
+      switch (emp.workMode) {
+        case WORK_MODES.IN_OFFICE:
+          stats.inOffice++;
+          break;
+        case WORK_MODES.SEMI_REMOTE:
+          stats.semiRemote++;
+          break;
+        case WORK_MODES.FULLY_REMOTE:
+          stats.fullyRemote++;
+          break;
+      }
+    });
+    
+    return stats;
+  } catch (error) {
+    console.error('Error getting work mode statistics:', error);
+    return { total: 0, inOffice: 0, semiRemote: 0, fullyRemote: 0 };
+  }
+};

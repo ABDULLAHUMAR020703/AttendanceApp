@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -14,10 +14,18 @@ import CameraScreen from './screens/CameraScreen';
 // Import auth context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
+// Import employee initialization
+import { initializeDefaultEmployees } from './utils/employees';
+
 const Stack = createStackNavigator();
 
 
 export default function App() {
+  useEffect(() => {
+    // Initialize default employees when app starts
+    initializeDefaultEmployees();
+  }, []);
+
   return (
     <AuthProvider>
       <AppNavigator />

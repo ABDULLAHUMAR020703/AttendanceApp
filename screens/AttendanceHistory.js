@@ -98,8 +98,9 @@ export default function AttendanceHistory({ route }) {
             {item.location && (
               <View className="flex-row items-center mb-2">
                 <Ionicons name="location-outline" size={16} color="#6b7280" />
-                <Text className="text-gray-600 text-sm ml-1">
-                  {item.location.latitude.toFixed(4)}, {item.location.longitude.toFixed(4)}
+                <Text className="text-gray-600 text-sm ml-1 flex-1">
+                  {item.location.address || 
+                   `${item.location.latitude.toFixed(4)}, ${item.location.longitude.toFixed(4)}`}
                 </Text>
               </View>
             )}

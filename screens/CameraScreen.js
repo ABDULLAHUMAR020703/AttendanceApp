@@ -17,6 +17,7 @@ import {
   verifyFace, 
   areModelsLoaded 
 } from '../utils/faceVerification';
+import { getCurrentLocationWithAddress, formatAddressForDisplay } from '../utils/location';
 
 export default function CameraScreen({ navigation, route }) {
   const { type, user } = route.params;
@@ -79,21 +80,7 @@ export default function CameraScreen({ navigation, route }) {
     }
   };
 
-  const getCurrentLocation = async () => {
-    try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy,
-      };
-    } catch (error) {
-      console.error('Error getting location:', error);
-      return null;
-    }
-  };
+  // Removed getCurrentLocation - now using getCurrentLocationWithAddress from utils/location.js
 
   const takePicture = async () => {
     if (!cameraRef) return;
@@ -109,8 +96,8 @@ export default function CameraScreen({ navigation, route }) {
         base64: false,
       });
 
-      // Get location
-      const currentLocation = await getCurrentLocation();
+      // Get location with address
+      const currentLocation = await getCurrentLocationWithAddress();
 
       setPhoto(photoResult.uri);
       setLocation(currentLocation);
@@ -279,7 +266,11 @@ export default function CameraScreen({ navigation, route }) {
           <View className="items-center">
             <View className="bg-black bg-opacity-50 rounded-full p-4 mb-4">
               <Text className="text-white text-sm text-center">
-                {location ? '📍 Location captured' : '📍 Getting location...'}
+                {location ? (
+                  location.address ? 
+                    `📍 ${formatAddressForDisplay(location.address, 40)}` : 
+                    '📍 Location captured'
+                ) : '📍 Getting location...'}
               </Text>
             </View>
 

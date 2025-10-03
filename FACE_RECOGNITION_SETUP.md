@@ -159,6 +159,29 @@ Azure Face API Free Tier:
   const AZURE_API_KEY = process.env.EXPO_PUBLIC_AZURE_KEY;
   ```
 
+## Location Features
+
+### **Address Display** 📍
+- **Real-time address lookup** using OpenStreetMap Nominatim API
+- **Free service** - no API keys required
+- **Human-readable addresses** instead of coordinates
+- **Fallback to coordinates** if address lookup fails
+
+### **How It Works**:
+1. **Get coordinates** using device GPS
+2. **Convert to address** using Nominatim reverse geocoding
+3. **Display address** in camera screen and attendance history
+4. **Save both** coordinates and address with attendance records
+
+### **Example**:
+```
+📍 123 Main Street, Downtown, City, Country
+```
+Instead of:
+```
+📍 40.7128, -74.0060
+```
+
 ## Next Steps
 
 ✅ Integration complete - app is ready to use!
@@ -169,6 +192,7 @@ Azure Face API Free Tier:
 3. Add admin panel to manage reference images
 4. Add multiple face support per user
 5. Implement liveness detection (anti-spoofing)
+6. Add offline address caching
 
 ## Support
 

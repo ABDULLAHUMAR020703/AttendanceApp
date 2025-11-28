@@ -72,6 +72,7 @@ The Attendance App is a full-featured employee management system designed for or
   - Set default leave balances
   - Manage individual employee leave balances
   - View and process leave requests
+  - Support for half-day leaves (Morning/Afternoon periods)
 - **Work Mode Requests** - Approve/reject work mode change requests
 - **Leave Requests** - Process employee leave requests
 

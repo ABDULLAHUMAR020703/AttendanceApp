@@ -1,5 +1,5 @@
 // Firebase Configuration
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp } from 'firebase/app';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,46 +21,64 @@ let auth;
 let db;
 
 try {
-  // Initialize Firebase App
-  app = initializeApp(firebaseConfig);
+  // Check if Firebase app is already initialized
+  try {
+    app = initializeApp(firebaseConfig);
+  } catch (initError) {
+    // If already initialized, get the existing app
+    if (initError.code === 'app/already-initialized' || initError.message?.includes('already-initialized')) {
+      app = getApp();
+    } else {
+      throw initError;
+    }
+  }
   
   // Initialize Firebase Auth with AsyncStorage persistence
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage)
-  });
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage)
+    });
+  } catch (authError) {
+    // If auth is already initialized, get the existing auth
+    if (authError.code === 'auth/already-initialized' || authError.message?.includes('already-initialized')) {
+      auth = getAuth(app);
+    } else {
+      throw authError;
+    }
+  }
   
   // Initialize Firestore
-  db = initializeFirestore(app, {
-    experimentalForceLongPolling: true, // For React Native compatibility
-  });
+  try {
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true, // For React Native compatibility
+    });
+  } catch (dbError) {
+    // If Firestore is already initialized, get the existing instance
+    if (dbError.code === 'failed-precondition' || dbError.message?.includes('already been initialized')) {
+      db = getFirestore(app);
+    } else {
+      throw dbError;
+    }
+  }
   
   console.log('✓ Firebase initialized successfully');
 } catch (error) {
   console.error('✗ Firebase initialization error:', error);
   
-  // Fallback initialization if there's an error
-  if (!app) {
-    try {
-      app = initializeApp(firebaseConfig);
-    } catch (initError) {
-      console.error('✗ Failed to initialize Firebase app:', initError);
+  // Fallback: try to get existing instances
+  try {
+    if (!app) {
+      app = getApp();
     }
-  }
-  
-  if (app && !auth) {
-    try {
+    if (!auth) {
       auth = getAuth(app);
-    } catch (authError) {
-      console.error('✗ Failed to initialize Firebase auth:', authError);
     }
-  }
-  
-  if (app && !db) {
-    try {
+    if (!db) {
       db = getFirestore(app);
-    } catch (dbError) {
-      console.error('✗ Failed to initialize Firestore:', dbError);
     }
+    console.log('✓ Firebase instances retrieved successfully');
+  } catch (fallbackError) {
+    console.error('✗ Failed to get Firebase instances:', fallbackError);
   }
 }
 

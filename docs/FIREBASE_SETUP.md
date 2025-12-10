@@ -46,26 +46,16 @@ Go to **Firestore Database** > **Rules** tab and use one of the following:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users collection
+    // Users collection (contains all user/employee data)
     match /users/{userId} {
+      // Allow authenticated users to read
       allow read: if request.auth != null;
+      
+      // Allow queries for username lookup (needed for username-based login before authentication)
+      allow list: if true;
+      
+      // Allow authenticated users to write
       allow write: if request.auth != null;
-    }
-    
-    // Employees collection
-    match /employees/{employeeId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Sign-up requests collection
-    match /signup_requests/{requestId} {
-      allow read: if request.auth != null && 
-                     (request.auth.token.role == 'super_admin' || 
-                      request.auth.token.role == 'manager');
-      allow create: if true; // Anyone can create sign-up requests
-      allow update, delete: if request.auth != null && 
-                              (request.auth.token.role == 'super_admin' || 
-                               request.auth.token.role == 'manager');
     }
     
     // Default: deny all other access
@@ -76,36 +66,28 @@ service cloud.firestore {
 }
 ```
 
-**For Production (Recommended - Authenticated access):**
+**For Production (Recommended - Role-based access with username login support):**
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users collection
+    // Users collection (contains all user/employee data)
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && 
-                     (request.auth.token.role == 'super_admin' || 
-                      request.auth.token.role == 'manager');
-    }
-    
-    // Employees collection
-    match /employees/{employeeId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && 
-                     (request.auth.token.role == 'super_admin' || 
-                      request.auth.token.role == 'manager');
-    }
-    
-    // Sign-up requests collection
-    match /signup_requests/{requestId} {
+      // Allow authenticated users to read their own data
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow super_admin to read all
       allow read: if request.auth != null && 
-                     (request.auth.token.role == 'super_admin' || 
-                      request.auth.token.role == 'manager');
-      allow create: if true; // Anyone can create sign-up requests
-      allow update, delete: if request.auth != null && 
-                              (request.auth.token.role == 'super_admin' || 
-                               request.auth.token.role == 'manager');
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+      
+      // Allow queries for username lookup (needed for username-based login before authentication)
+      // This allows the app to query users by username to find their email
+      allow list: if true;
+      
+      // Only super_admin and managers can write
+      allow write: if request.auth != null && 
+                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
     }
     
     // Default: deny all other access
@@ -115,6 +97,13 @@ service cloud.firestore {
   }
 }
 ```
+
+**Important Notes:**
+- The `allow list: if true;` rule is required to support username-based login, as the app needs to query Firestore by username before the user is authenticated
+- For production, consider restricting the list rule to only allow queries on the `username` field for better security
+- After updating rules, click **Publish** to apply them
+
+**Note**: The app only uses the `users` collection in Firestore. Signup requests and other data are stored locally in AsyncStorage, not in Firestore.
 
 **Important**: After updating the rules, click **Publish** to apply them.
 
@@ -129,7 +118,7 @@ service cloud.firestore {
 
 ## Step 5: Configure Firebase in the App
 
-1. Open `config/firebase.js` in your project
+1. Open `core/config/firebase.js` in your project
 2. Replace the placeholder values with your Firebase configuration:
 
 ```javascript
@@ -252,54 +241,57 @@ Since the app no longer uses `users.txt`, you need to create initial users in Fi
 
 ### Option 3: Migrate from users.txt (Recommended for Initial Setup)
 
-Use the migration utility to import all users from `users.txt`:
+Use the migration script to import all users from `users.txt`:
 
-1. Import the migration function in your app:
-   ```javascript
-   import { migrateUsersFromFile } from './utils/migrateUsers';
+1. Run the migration script from the project root:
+   ```bash
+   node scripts/migrate-users-to-firebase.mjs
    ```
 
-2. Call it from your admin dashboard or create a temporary button:
-   ```javascript
-   const handleMigrate = async () => {
-     Alert.alert('Migrate Users', 'This will create all users from users.txt. Continue?', [
-       { text: 'Cancel', style: 'cancel' },
-       { 
-         text: 'Migrate', 
-         onPress: async () => {
-           const result = await migrateUsersFromFile();
-           Alert.alert(
-             'Migration Complete', 
-             `Created ${result.success} of ${result.total} users`
-           );
-         }
-       }
-     ]);
-   };
-   ```
-
-3. The migration will:
+2. The script will:
+   - Read `users.txt` from the project root
    - Create Firebase Authentication accounts for all users
    - Create Firestore documents with complete user data
    - Include all fields: username, email, name, role, department, position, workMode, hireDate
+   - Show progress and results in the console
+
+**Note**: Make sure you have:
+- Firebase Admin SDK configured (if using server-side migration)
+- Or use the client-side migration through the app's admin dashboard
 
 ## Troubleshooting
 
 ### "Missing or insufficient permissions" Error
 
-- Check your Firestore security rules
-- Make sure rules are published
-- Verify user is authenticated
+This error typically occurs when:
+1. **Username Login**: The app tries to query Firestore by username before authentication. The security rules must allow queries (`allow list`) for username lookup.
+2. **After Authentication**: The app tries to read user data from Firestore, but rules don't allow authenticated users to read their own document.
+
+**Solutions:**
+- Ensure your security rules include `allow list: if true;` to allow username queries
+- Ensure authenticated users can read their own document: `allow read: if request.auth != null && request.auth.uid == userId;`
+- Make sure rules are published after updating
+- Verify the user is authenticated (check Firebase Auth state)
 
 ### "User not found" Error
 
-- Check if user exists in Firebase Authentication
-- Verify user document exists in Firestore `users` collection
-- Check if username field matches in Firestore
+This can occur in two scenarios:
+
+1. **Username Login**: User doesn't exist in Firestore
+   - Check if user document exists in Firestore `users` collection
+   - Verify the `username` field matches what the user entered
+   - Run the migration script if Firestore is empty
+
+2. **Email Login**: User exists in Firebase Auth but not in Firestore
+   - Check if user exists in Firebase Authentication
+   - Verify user document exists in Firestore `users` collection (document ID = Firebase Auth UID)
+   - Create the Firestore document if it's missing
+
+**Important**: Users must exist in BOTH Firebase Authentication AND Firestore. If Firestore is empty, login will fail even if users exist in Firebase Auth.
 
 ### Authentication Not Working
 
-- Verify Firebase configuration in `config/firebase.js`
+- Verify Firebase configuration in `core/config/firebase.js`
 - Check Firebase project settings
 - Ensure Email/Password authentication is enabled
 - Check console for error messages

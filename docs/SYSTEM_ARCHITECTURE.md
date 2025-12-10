@@ -390,23 +390,35 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
+      // Allow authenticated users to read
       allow read: if request.auth != null;
+      
+      // Allow queries for username lookup (needed for username-based login)
+      allow list: if true;
+      
+      // Allow authenticated users to write
       allow write: if request.auth != null;
     }
   }
 }
 ```
 
-**Production Rules (Recommended):**
+**Production Rules (Recommended - with username login support):**
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
-      // Users can read their own data
+      // Allow authenticated users to read their own data
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow super_admin to read all
       allow read: if request.auth != null && 
-                     (request.auth.uid == userId || 
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin');
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+      
+      // Allow queries for username lookup (needed for username-based login before authentication)
+      // This allows the app to query users by username to find their email
+      allow list: if true;
       
       // Only super_admin and managers can write
       allow write: if request.auth != null && 
@@ -416,6 +428,11 @@ service cloud.firestore {
   }
 }
 ```
+
+**Important Notes:**
+- The `allow list: if true;` rule is required for username-based login, as the app queries Firestore by username before authentication
+- Without this rule, username login will fail with "Missing or insufficient permissions"
+- Email login works differently: it authenticates first, then reads Firestore (which requires `allow read` for authenticated users)
 
 ### Firebase API Usage
 
@@ -714,15 +731,17 @@ When a user creates a ticket:
 ```
 1. User enters username/email + password
    ↓
-2. Check if input is username or email
+2. Check if input is username or email (contains '@'?)
    ↓
-3. If username → Query Firestore for email
-   ↓
+3a. If username → Query Firestore for email (requires allow list permission)
+    ↓
+3b. If email → Skip Firestore query, use email directly
+    ↓
 4. Authenticate with Firebase (email + password)
    ↓
 5. Get Firebase Auth UID
    ↓
-6. Fetch user document from Firestore (users/{uid})
+6. Fetch user document from Firestore (users/{uid}) (requires read permission)
    ↓
 7. Optionally fetch employee data from AsyncStorage
    ↓
@@ -735,6 +754,27 @@ When a user creates a ticket:
     - manager/super_admin → AdminDashboard
 ```
 
+### Username vs Email Login
+
+**Username Login:**
+1. App queries Firestore by `username` field (before authentication)
+2. Requires Firestore security rule: `allow list: if true;`
+3. If user not found in Firestore → fails with "Invalid username or password"
+4. If found → gets email → authenticates with Firebase Auth
+5. Then reads user document from Firestore
+
+**Email Login:**
+1. Skips Firestore query (uses email directly)
+2. Authenticates with Firebase Auth immediately
+3. After authentication → reads user document from Firestore
+4. Requires Firestore security rule: `allow read: if request.auth != null && request.auth.uid == userId;`
+5. If Firestore document missing → fails with "User data not found"
+
+**Key Difference:**
+- Username login requires Firestore access BEFORE authentication
+- Email login requires Firestore access AFTER authentication
+- Both require users to exist in BOTH Firebase Auth AND Firestore
+
 ### Code Flow
 
 ```javascript
@@ -743,29 +783,63 @@ authenticateUser(usernameOrEmail, password)
 
 // 2. Check if username or email
 if (!usernameOrEmail.includes('@')) {
-  // Find email from Firestore
+  // Username login: Query Firestore BEFORE authentication
+  // Requires: allow list: if true; in security rules
   const userDoc = await getDocs(query(usersRef, where('username', '==', username)));
+  
+  if (querySnapshot.empty) {
+    return { success: false, error: 'Invalid username or password' };
+  }
+  
   email = userDoc.data().email;
+} else {
+  // Email login: Use email directly, skip Firestore query
+  email = usernameOrEmail;
 }
 
-// 3. Firebase Authentication
+// 3. Firebase Authentication (works for both username and email login)
 const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
-// 4. Get user data from Firestore
+// 4. Get user data from Firestore (AFTER authentication)
+// Requires: allow read: if request.auth != null && request.auth.uid == userId;
 const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
 const userData = userDoc.data();
 
-// 5. Return user object
+// 5. Check if Firestore document exists
+if (!userData) {
+  return { success: false, error: 'User data not found' };
+}
+
+// 6. Return user object
 return {
   success: true,
   user: {
-    username: userData.username,
-    role: userData.role,
+    username: userData.username || email.split('@')[0],
+    role: userData.role || 'employee',
     uid: userCredential.user.uid,
     email: userCredential.user.email
   }
 };
 ```
+
+### What Happens When Firestore is Empty?
+
+**Scenario 1: Username Login with Empty Firestore**
+- Step 3: Query Firestore by username → returns empty
+- Result: ❌ Fails immediately with "Invalid username or password"
+- User never reaches Firebase Authentication
+
+**Scenario 2: Email Login with Empty Firestore**
+- Step 3: Skips Firestore query, uses email directly
+- Step 4: Firebase Authentication succeeds (if user exists in Firebase Auth)
+- Step 5: Tries to read Firestore document → document doesn't exist
+- Result: ❌ Fails with "User data not found"
+- User authenticated but can't proceed
+
+**Solution:**
+- Users must exist in BOTH Firebase Authentication AND Firestore
+- Run migration script: `npm run migrate-users`
+- Or create users through the app's admin dashboard
 
 ---
 
@@ -909,22 +983,42 @@ Example: testuser,password:testuser123,role:employee
 
 ### Common Issues
 
-**1. "User not found" error:**
-- Check if user exists in Firestore `users` collection
-- Verify username/email is correct
-- Check if user document has all required fields
+**1. "Missing or insufficient permissions" error:**
+- **Cause**: Firestore security rules are blocking access
+- **For Username Login**: Rules must allow queries (`allow list`) before authentication
+- **For Email Login**: Rules must allow authenticated users to read their own document
+- **Solution**: Update Firestore security rules to include `allow list: if true;` and proper read permissions
+- See `docs/FIREBASE_SETUP.md` for complete security rules
 
-**2. "Invalid password" error:**
+**2. "User not found" error:**
+- **For Username Login**: User doesn't exist in Firestore `users` collection
+- **For Email Login**: User exists in Firebase Auth but Firestore document is missing
+- **Solution**: 
+  - Check if user exists in both Firebase Authentication AND Firestore
+  - Run migration script if Firestore is empty: `npm run migrate-users`
+  - Users must exist in BOTH places for login to work
+
+**3. "User data not found" error:**
+- **Cause**: User authenticated successfully in Firebase Auth, but Firestore document doesn't exist
+- **Solution**: Create the Firestore document with the user's UID as document ID
+- This happens when users are created in Firebase Auth but not in Firestore
+
+**4. "Invalid password" error:**
 - Password is stored in Firebase Auth (hashed)
 - Cannot retrieve original password
 - Use Firebase Console to reset password
 
-**3. Ticket not routing to manager:**
+**5. Empty Firestore Database:**
+- **Username Login**: Will fail immediately with "Invalid username or password"
+- **Email Login**: Will authenticate in Firebase Auth, but fail when reading Firestore with "User data not found"
+- **Solution**: Populate Firestore using migration script or create users through the app
+
+**6. Ticket not routing to manager:**
 - Verify manager exists with correct `role: "manager"`
 - Verify manager's `department` matches ticket category mapping
 - Check if manager is `isActive: true`
 
-**4. Manager cannot manage employees:**
+**7. Manager cannot manage employees:**
 - Verify manager's `department` matches employee's `department`
 - Check if manager's `role` is `"manager"` (not `"employee"`)
 - Verify employee is not a `super_admin` (managers can't manage super admins)

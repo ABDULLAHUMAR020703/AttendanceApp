@@ -142,8 +142,7 @@ AttendanceApp/
 ├── components/                     # Legacy components (to be migrated)
 │
 ├── scripts/                        # Build and deployment scripts
-│   ├── migrate-users-to-firebase.mjs
-│   └── sync-users.js
+│   └── migrate-users-to-firebase.mjs
 │
 ├── docs/                           # Documentation
 │   ├── MODULAR_ARCHITECTURE.md

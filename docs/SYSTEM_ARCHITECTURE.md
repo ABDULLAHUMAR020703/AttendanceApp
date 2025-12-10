@@ -248,58 +248,376 @@ Every user/employee has the following structure:
 
 ## Firebase Integration
 
-### What Goes to Firebase?
+### Overview
 
-#### 1. Firebase Authentication
-- **Email** (used as login identifier)
-- **Password** (hashed, not retrievable)
-- **UID** (unique user identifier)
+The application uses **Firebase** as the primary backend service for authentication and user data management. Firebase provides secure, scalable, and real-time capabilities for the attendance management system.
 
-#### 2. Firestore Database (`users` collection)
+### Firebase Services Used
 
-Each user document contains:
+1. **Firebase Authentication** - User authentication and session management
+2. **Cloud Firestore** - NoSQL database for user profiles and data
+3. **Firebase Configuration** - Centralized app configuration
 
-```json
-{
-  "uid": "firebase_auth_uid",
-  "username": "testuser",
-  "email": "testuser@company.com",
-  "name": "Test User",
-  "role": "employee",
-  "department": "Engineering",
-  "position": "AI Engineer",
-  "workMode": "in_office",
-  "hireDate": "2023-01-15",
-  "isActive": true,
-  "createdAt": "2023-01-15T00:00:00.000Z",
-  "updatedAt": "2023-01-15T00:00:00.000Z"
-}
+### Firebase Configuration
+
+The Firebase configuration is located in `core/config/firebase.js`:
+
+```javascript
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
+  measurementId: "YOUR_MEASUREMENT_ID" // Optional
+};
 ```
 
-**Document ID:** Firebase Auth UID (not username)
+### Firebase Initialization
 
-### Firebase Collection Structure
+The app initializes Firebase with React Native-specific settings:
+
+```javascript
+// Initialize Firebase App
+app = initializeApp(firebaseConfig);
+
+// Initialize Firebase Auth with AsyncStorage persistence
+auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
+
+// Initialize Firestore with React Native compatibility
+db = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+});
+```
+
+**Key Features:**
+- **AsyncStorage Persistence**: Auth state persists across app restarts
+- **Long Polling**: Ensures Firestore works reliably in React Native
+- **Error Handling**: Graceful fallbacks if initialization fails
+
+### Firebase Authentication
+
+#### What is Stored in Firebase Auth?
+
+- **Email**: Used as the primary login identifier
+- **Password**: Hashed and encrypted (not retrievable)
+- **UID**: Unique user identifier (used as Firestore document ID)
+- **Session State**: Automatically managed by Firebase
+
+#### Authentication Methods Supported
+
+1. **Email/Password Authentication** (Primary)
+   - Users can login with email or username
+   - If username is provided, system looks up email in Firestore
+   - Password is verified by Firebase Authentication
+
+2. **Session Persistence**
+   - Uses AsyncStorage for offline persistence
+   - Automatically restores session on app restart
+   - `onAuthStateChanged` listener updates app state
+
+#### Authentication Flow
+
+```javascript
+// 1. User enters username or email
+authenticateUser(usernameOrEmail, password)
+
+// 2. If username, find email in Firestore
+if (!usernameOrEmail.includes('@')) {
+  const userDoc = await getDocs(
+    query(usersRef, where('username', '==', username))
+  );
+  email = userDoc.data().email;
+}
+
+// 3. Authenticate with Firebase
+const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+// 4. Get user data from Firestore
+const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+```
+
+#### Authentication Error Handling
+
+The system handles various Firebase Auth errors:
+
+- `auth/user-not-found`: User doesn't exist
+- `auth/wrong-password`: Incorrect password
+- `auth/invalid-email`: Invalid email format
+- `auth/user-disabled`: Account disabled
+- `auth/too-many-requests`: Rate limiting
+- `auth/email-already-in-use`: Email already registered
+- `auth/weak-password`: Password too weak
+
+### Firestore Database
+
+#### Collection Structure
 
 ```
 Firestore Database
 └── users (collection)
     ├── {uid_1} (document)
+    │   ├── uid: "firebase_auth_uid"
     │   ├── username: "testuser"
     │   ├── email: "testuser@company.com"
+    │   ├── name: "Test User"
     │   ├── role: "employee"
     │   ├── department: "Engineering"
-    │   └── ... (all fields)
+    │   ├── position: "AI Engineer"
+    │   ├── workMode: "in_office"
+    │   ├── hireDate: "2023-01-15"
+    │   ├── isActive: true
+    │   ├── createdAt: "2023-01-15T00:00:00.000Z"
+    │   └── updatedAt: "2023-01-15T00:00:00.000Z"
     ├── {uid_2} (document)
     └── ...
 ```
 
+**Important Notes:**
+- **Document ID**: Always the Firebase Auth UID (not username)
+- **Username Field**: Stored as a field for querying
+- **Email Field**: Must match Firebase Auth email
+- **Role Field**: Controls access (`super_admin`, `manager`, `employee`)
+
+#### Firestore Security Rules
+
+**Development Rules (Permissive):**
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}
+```
+
+**Production Rules (Recommended):**
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      // Users can read their own data
+      allow read: if request.auth != null && 
+                     (request.auth.uid == userId || 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin');
+      
+      // Only super_admin and managers can write
+      allow write: if request.auth != null && 
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
+    }
+  }
+}
+```
+
+### Firebase API Usage
+
+#### Creating Users
+
+```javascript
+// 1. Create in Firebase Authentication
+const userCredential = await createUserWithEmailAndPassword(
+  auth, 
+  email, 
+  password
+);
+
+// 2. Create Firestore document
+await setDoc(doc(db, 'users', userCredential.user.uid), {
+  uid: userCredential.user.uid,
+  username,
+  email,
+  name,
+  role,
+  department,
+  position,
+  workMode,
+  hireDate,
+  isActive: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+});
+```
+
+#### Querying Users
+
+```javascript
+// Find user by username
+const usersRef = collection(db, 'users');
+const q = query(usersRef, where('username', '==', username));
+const querySnapshot = await getDocs(q);
+
+// Get user by UID
+const userDoc = await getDoc(doc(db, 'users', uid));
+const userData = userDoc.data();
+```
+
+#### Updating Users
+
+```javascript
+// Update user role
+await setDoc(doc(db, 'users', userId), {
+  role: newRole,
+  updatedAt: new Date().toISOString()
+}, { merge: true });
+
+// Update multiple fields
+await setDoc(doc(db, 'users', userId), {
+  department: newDepartment,
+  position: newPosition,
+  workMode: newWorkMode,
+  updatedAt: new Date().toISOString()
+}, { merge: true });
+```
+
+### Firebase Authentication State Management
+
+The app uses `onAuthStateChanged` listener to track authentication state:
+
+```javascript
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (firebaseUser) {
+      // User is signed in
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      const userData = userDoc.data();
+      setUser(combinedUser);
+    } else {
+      // User is signed out
+      setUser(null);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+```
+
+### What Goes to Firebase?
+
+#### ✅ Stored in Firebase
+
+1. **Firebase Authentication**
+   - Email addresses
+   - Hashed passwords
+   - User UIDs
+   - Session tokens
+
+2. **Firestore `users` Collection**
+   - Complete user profiles
+   - Username, email, name
+   - Role, department, position
+   - Work mode, hire date
+   - Active status
+   - Timestamps
+
 ### What Does NOT Go to Firebase?
 
-- ❌ Passwords (stored in Firebase Auth, not Firestore)
-- ❌ Attendance records (stored in AsyncStorage)
-- ❌ Tickets (stored in AsyncStorage)
-- ❌ Notifications (stored in AsyncStorage)
-- ❌ Employee list (stored in AsyncStorage, synced with Firebase)
+#### ❌ Stored Locally (AsyncStorage)
+
+- **Attendance Records**: `@attendance_records`
+- **Tickets**: `@tickets`
+- **Notifications**: `@notifications`
+- **Signup Requests**: `@signup_requests`
+- **Leave Requests**: `@leave_requests`
+- **Employee List Cache**: `@company_employees` (synced from Firebase)
+
+**Why?**
+- Attendance and tickets are device-specific
+- Notifications are local to each device
+- Reduces Firebase read/write costs
+- Faster local access
+
+### Firebase Migration
+
+#### From Local Storage to Firebase
+
+The app has been fully migrated from local file storage:
+
+**Before (Legacy):**
+- `users.txt` file in device storage
+- FileSystem operations
+- Manual file parsing
+
+**After (Current):**
+- Firebase Authentication for credentials
+- Firestore for user data
+- Automatic sync across devices
+- Built-in offline support
+
+#### Migration Script
+
+Use `scripts/migrate-users-to-firebase.mjs` to migrate from `users.txt`:
+
+```bash
+npm run migrate-users
+```
+
+The script:
+1. Reads `users.txt` from project root
+2. Parses user data
+3. Creates Firebase Auth accounts
+4. Creates Firestore documents
+5. Includes all user fields
+
+### Firebase Best Practices
+
+1. **Security**
+   - Use production security rules in production
+   - Never expose API keys in client code (use environment variables)
+   - Implement proper role-based access control
+
+2. **Performance**
+   - Use Firestore queries efficiently
+   - Cache frequently accessed data in AsyncStorage
+   - Implement pagination for large datasets
+
+3. **Error Handling**
+   - Always handle Firebase errors gracefully
+   - Provide user-friendly error messages
+   - Log errors for debugging
+
+4. **Offline Support**
+   - Firebase Auth persists automatically
+   - Firestore has built-in offline cache
+   - AsyncStorage provides additional offline storage
+
+### Firebase Troubleshooting
+
+#### Common Issues
+
+**1. "Missing or insufficient permissions"**
+- Check Firestore security rules
+- Verify rules are published
+- Ensure user is authenticated
+
+**2. "Firebase: No Firebase App '[DEFAULT]' has been created"**
+- Check `core/config/firebase.js` initialization
+- Ensure `initializeApp()` is called before other services
+- Verify Firebase configuration is correct
+
+**3. "User not found"**
+- Check if user exists in Firebase Authentication
+- Verify Firestore document exists
+- Check username field matches
+
+**4. Authentication not persisting**
+- Verify AsyncStorage is working
+- Check `getReactNativePersistence` is used
+- Ensure app has storage permissions
+
+### Firebase Setup Reference
+
+For complete setup instructions, see:
+- **`docs/FIREBASE_SETUP.md`** - Step-by-step Firebase setup guide
+- **`core/config/firebase.js`** - Firebase configuration file
+- **`features/auth/services/authService.js`** - Authentication service implementation
 
 ---
 
@@ -518,9 +836,11 @@ return {
 - Managers can only manage employees in their department
 
 ### 4. Firebase Structure
-- **Authentication**: Email/password (hashed)
-- **Firestore**: User profile data (no passwords)
-- **Document ID**: Firebase Auth UID
+- **Authentication**: Email/password (hashed, stored in Firebase Auth)
+- **Firestore**: User profile data (no passwords, document ID = Firebase Auth UID)
+- **Configuration**: `core/config/firebase.js`
+- **Initialization**: AsyncStorage persistence, long polling for React Native
+- **Security**: Firestore security rules for role-based access
 
 ### 5. Data Flow
 - Login → Firebase Auth → Firestore → AsyncStorage (optional)
@@ -649,6 +969,35 @@ Example: testuser,password:testuser123,role:employee
 - **Legacy Auth**: `utils/auth.js` (use `features/auth` instead)
 - **Legacy Screens**: `screens/` (being migrated to feature modules)
 - **Legacy Utils**: `utils/` (being migrated to feature modules)
+
+---
+
+---
+
+## Firebase Quick Reference
+
+### Configuration File
+- **Location**: `core/config/firebase.js`
+- **Exports**: `auth`, `db`, `app`
+
+### Authentication Service
+- **Location**: `features/auth/services/authService.js`
+- **Functions**: `authenticateUser`, `createUser`, `updateUserRole`, `updateUserInfo`, `checkUsernameExists`
+
+### Firestore Collections
+- **`users`**: User profiles (document ID = Firebase Auth UID)
+
+### Firebase Services
+- **Authentication**: Email/password with AsyncStorage persistence
+- **Firestore**: NoSQL database with React Native long polling
+- **Error Handling**: Comprehensive error codes and messages
+
+### Migration
+- **Script**: `scripts/migrate-users-to-firebase.mjs`
+- **Command**: `npm run migrate-users`
+- **Source**: `users.txt` → Firebase Auth + Firestore
+
+For detailed Firebase setup, see `docs/FIREBASE_SETUP.md`.
 
 ---
 

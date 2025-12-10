@@ -1,7 +1,7 @@
 // Ticket Management Utilities using AsyncStorage
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNotification } from './notifications';
-import { getAdminUsers } from './employees';
+import { getAdminUsers, getSuperAdminUsers, getManagersByDepartment } from './employees';
 
 const TICKETS_KEY = 'tickets';
 
@@ -12,6 +12,15 @@ export const TICKET_CATEGORIES = {
   FINANCE: 'finance',
   FACILITIES: 'facilities',
   OTHER: 'other'
+};
+
+// Map ticket categories to departments
+const CATEGORY_TO_DEPARTMENT_MAP = {
+  [TICKET_CATEGORIES.TECHNICAL]: 'Engineering',
+  [TICKET_CATEGORIES.HR]: 'HR',
+  [TICKET_CATEGORIES.FINANCE]: 'Finance',
+  [TICKET_CATEGORIES.FACILITIES]: 'Facilities',
+  [TICKET_CATEGORIES.OTHER]: null // No specific department, goes to super_admin only
 };
 
 // Ticket Priorities
@@ -143,20 +152,77 @@ export const createTicket = async (createdBy, category, priority, subject, descr
     const allTickets = ticketsJson ? JSON.parse(ticketsJson) : [];
     allTickets.push(ticket);
 
+    // Auto-assign to department manager based on category
+    let assignedManager = null;
+    const department = CATEGORY_TO_DEPARTMENT_MAP[category];
+    
+    if (department) {
+      try {
+        const departmentManagers = await getManagersByDepartment(department);
+        if (departmentManagers.length > 0) {
+          // Assign to first manager found (you can add logic to distribute evenly)
+          assignedManager = departmentManagers[0];
+          ticket.assignedTo = assignedManager.username;
+          ticket.status = TICKET_STATUS.IN_PROGRESS;
+          
+          // Update the ticket in the array
+          const ticketIndex = allTickets.length - 1;
+          allTickets[ticketIndex] = ticket;
+          
+          console.log(`✓ Ticket auto-assigned to ${assignedManager.username} (${department} Manager)`);
+        }
+      } catch (error) {
+        console.error('Error finding department manager:', error);
+      }
+    }
+
     await AsyncStorage.setItem(TICKETS_KEY, JSON.stringify(allTickets));
 
-    // Send notification to admins
+    // Send notification to super_admins first
     try {
-      const admins = await getAdminUsers();
+      const superAdmins = await getSuperAdminUsers();
       const notificationTitle = 'New Ticket Created';
-      const notificationBody = `${createdBy} created a ${getPriorityLabel(priority)} priority ${getCategoryLabel(category)} ticket: ${subject}`;
+      const notificationBody = `${createdBy} created a ${getPriorityLabel(priority)} priority ${getCategoryLabel(category)} ticket: ${subject}${assignedManager ? ` (Assigned to ${assignedManager.name})` : ''}`;
       
-      for (const admin of admins) {
+      for (const superAdmin of superAdmins) {
         await createNotification(
-          admin.username,
+          superAdmin.username,
           notificationTitle,
           notificationBody,
           'ticket_created',
+          {
+            ticketId,
+            createdBy,
+            category,
+            priority,
+            subject,
+            assignedTo: assignedManager?.username || null,
+            // Navigation data
+            navigation: {
+              screen: 'TicketManagement',
+              params: {
+                user: superAdmin,
+                ticketId: ticketId
+              }
+            }
+          }
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending notification to super admins:', notifError);
+    }
+
+    // Send notification to assigned department manager
+    if (assignedManager) {
+      try {
+        const notificationTitle = 'Ticket Assigned to You';
+        const notificationBody = `A ${getPriorityLabel(priority)} priority ${getCategoryLabel(category)} ticket has been assigned to you: ${subject}`;
+        
+        await createNotification(
+          assignedManager.username,
+          notificationTitle,
+          notificationBody,
+          'ticket_assigned',
           {
             ticketId,
             createdBy,
@@ -167,15 +233,53 @@ export const createTicket = async (createdBy, category, priority, subject, descr
             navigation: {
               screen: 'TicketManagement',
               params: {
-                user: admin,
+                user: assignedManager,
                 ticketId: ticketId
               }
             }
           }
         );
+        console.log(`✓ Notification sent to ${assignedManager.username}`);
+      } catch (notifError) {
+        console.error('Error sending notification to assigned manager:', notifError);
       }
-    } catch (notifError) {
-      console.error('Error sending notification to admins:', notifError);
+    } else {
+      // If no manager found, notify all managers about unassigned ticket
+      try {
+        const allManagers = await getAdminUsers();
+        const managers = allManagers.filter(admin => admin.role === 'manager');
+        
+        if (managers.length > 0) {
+          const notificationTitle = 'New Unassigned Ticket';
+          const notificationBody = `${createdBy} created a ${getPriorityLabel(priority)} priority ${getCategoryLabel(category)} ticket (needs assignment): ${subject}`;
+          
+          for (const manager of managers) {
+            await createNotification(
+              manager.username,
+              notificationTitle,
+              notificationBody,
+              'ticket_created',
+              {
+                ticketId,
+                createdBy,
+                category,
+                priority,
+                subject,
+                // Navigation data
+                navigation: {
+                  screen: 'TicketManagement',
+                  params: {
+                    user: manager,
+                    ticketId: ticketId
+                  }
+                }
+              }
+            );
+          }
+        }
+      } catch (notifError) {
+        console.error('Error sending notification to managers:', notifError);
+      }
     }
 
     console.log(`Ticket created: ${ticketId}`);

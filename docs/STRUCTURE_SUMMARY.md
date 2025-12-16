@@ -65,36 +65,69 @@ AttendanceApp/
 ## Migration Status
 
 ### ✅ Completed
-- Core infrastructure (config, contexts, navigation)
-- Shared modules (constants, utilities, components)
-- Auth feature module
-- Navigation refactoring
-- Deployment configuration
-- Documentation
+- **Core Infrastructure**: Fully implemented
+  - ✅ `core/config/` - Firebase configuration
+  - ✅ `core/contexts/` - Auth and Theme contexts
+  - ✅ `core/navigation/` - App, Auth, and Main navigators
+  - ✅ `core/services/` - Storage abstraction layer
+- **Shared Modules**: Fully implemented
+  - ✅ `shared/constants/` - Roles, work modes, routes
+  - ✅ `shared/components/` - Logo, Trademark, CustomDrawer
+  - ✅ `shared/utils/` - Responsive utilities
+- **Partial Feature Migration**:
+  - ✅ `features/auth/` - Auth service and utilities (screens still in `screens/`)
+  - ✅ `features/calendar/` - Calendar component (screen still in `screens/`)
 
 ### 🔄 In Progress
-- Feature modules migration
-- Import path updates
+- **Feature Modules**: Most features still need migration
+  - ⏳ Attendance feature (screens: EmployeeDashboard, AttendanceHistory, ManualAttendanceScreen)
+  - ⏳ Tickets feature (screens: TicketScreen, TicketManagementScreen)
+  - ⏳ Leave feature (screens: LeaveRequestScreen)
+  - ⏳ Employees feature (screens: EmployeeManagement, CreateUserScreen, SignupApprovalScreen)
+  - ⏳ Notifications feature (screens: NotificationsScreen)
+  - ⏳ Analytics feature (screens: AdminDashboard, HRDashboard)
+- **Import Path Updates**: Navigation and screens still use legacy paths
 
 ### ⏳ Pending
-- Complete all feature migrations
-- Remove legacy code
-- Full import path updates
+- Complete all feature migrations (move screens and utils to feature modules)
+- Create feature `index.js` files for all features
+- Update all imports to use feature modules instead of legacy paths
+- Remove legacy code from `screens/`, `utils/`, `components/` after migration
+- Update `App.js` to use feature modules instead of `utils/employees`
 
 ## How to Use
 
-### Importing from Features
+### Importing from Features (New Structure)
 
 ```javascript
-// Auth feature
-import { authenticateUser } from '../features/auth';
+// Auth feature (migrated)
+import { authenticateUser, createUser } from '../features/auth';
 
 // Shared constants
 import { ROLES } from '../shared/constants/roles';
 import { WORK_MODES } from '../shared/constants/workModes';
+import { ROUTES } from '../shared/constants/routes';
 
 // Core contexts
 import { useAuth } from '../core/contexts/AuthContext';
+import { useTheme } from '../core/contexts/ThemeContext';
+
+// Shared components
+import Logo from '../shared/components/Logo';
+import CustomDrawer from '../shared/components/CustomDrawer';
+```
+
+### Current Import Patterns (Legacy - Still in Use)
+
+```javascript
+// Legacy screens (currently used by navigation)
+import EmployeeDashboard from '../screens/EmployeeDashboard';
+import AttendanceHistory from '../screens/AttendanceHistory';
+
+// Legacy utils (currently used by screens)
+import { checkIn, checkOut } from '../utils/auth';
+import { getEmployees } from '../utils/employees';
+import { createTicket } from '../utils/ticketManagement';
 ```
 
 ### Adding a New Feature

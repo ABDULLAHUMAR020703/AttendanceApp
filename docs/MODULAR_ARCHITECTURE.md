@@ -26,97 +26,25 @@ AttendanceApp/
 │       └── storage.js             # Storage abstraction layer
 │
 ├── features/                       # Feature modules (self-contained)
-│   ├── auth/                       # Authentication feature
-│   │   ├── screens/               # Auth screens
-│   │   │   ├── LoginScreen.js
-│   │   │   ├── SignUpScreen.js
-│   │   │   └── AuthenticationScreen.js
-│   │   ├── components/            # Auth-specific components
-│   │   ├── hooks/                 # Auth hooks
-│   │   │   └── useAuth.js
+│   ├── auth/                       # ✅ Authentication feature (PARTIALLY MIGRATED)
 │   │   ├── services/              # Auth services
-│   │   │   ├── authService.js    # Auth business logic
-│   │   │   └── signupService.js  # Signup logic
+│   │   │   └── authService.js    # Auth business logic (Firebase integration)
 │   │   ├── utils/                 # Auth utilities
 │   │   │   ├── biometricAuth.js
 │   │   │   └── authPreferences.js
-│   │   └── index.js               # Feature exports
+│   │   └── index.js               # Feature exports (public API)
 │   │
-│   ├── attendance/                 # Attendance feature
-│   │   ├── screens/
-│   │   │   ├── EmployeeDashboard.js
-│   │   │   ├── AttendanceHistory.js
-│   │   │   └── ManualAttendanceScreen.js
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   │   └── useAttendance.js
-│   │   ├── services/
-│   │   │   └── attendanceService.js
-│   │   ├── utils/
-│   │   │   ├── location.js
-│   │   │   └── faceVerification.js
-│   │   └── index.js
-│   │
-│   ├── tickets/                    # Ticket management feature
-│   │   ├── screens/
-│   │   │   ├── TicketScreen.js
-│   │   │   └── TicketManagementScreen.js
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   │   └── useTickets.js
-│   │   ├── services/
-│   │   │   └── ticketService.js
-│   │   ├── utils/
-│   │   │   └── ticketRouting.js
-│   │   └── index.js
-│   │
-│   ├── leave/                      # Leave management feature
-│   │   ├── screens/
-│   │   │   └── LeaveRequestScreen.js
-│   │   ├── hooks/
-│   │   │   └── useLeave.js
-│   │   ├── services/
-│   │   │   └── leaveService.js
-│   │   └── index.js
-│   │
-│   ├── employees/                  # Employee management feature
-│   │   ├── screens/
-│   │   │   ├── EmployeeManagement.js
-│   │   │   ├── CreateUserScreen.js
-│   │   │   └── SignupApprovalScreen.js
-│   │   ├── hooks/
-│   │   │   └── useEmployees.js
-│   │   ├── services/
-│   │   │   └── employeeService.js
-│   │   └── index.js
-│   │
-│   ├── notifications/              # Notifications feature
-│   │   ├── screens/
-│   │   │   └── NotificationsScreen.js
-│   │   ├── hooks/
-│   │   │   └── useNotifications.js
-│   │   ├── services/
-│   │   │   └── notificationService.js
-│   │   └── index.js
-│   │
-│   ├── calendar/                   # Calendar feature
-│   │   ├── screens/
-│   │   │   └── CalendarScreen.js
-│   │   ├── components/
-│   │   │   └── DatePickerCalendar.js
-│   │   ├── services/
-│   │   │   └── calendarService.js
-│   │   └── index.js
-│   │
-│   └── analytics/                  # Analytics feature
-│       ├── screens/
-│       │   ├── AdminDashboard.js
-│       │   └── HRDashboard.js
-│       ├── hooks/
-│       │   └── useAnalytics.js
-│       ├── services/
-│       │   └── analyticsService.js
-│       └── index.js
+│   └── calendar/                   # ✅ Calendar feature (PARTIALLY MIGRATED)
+│       └── components/
+│           └── DatePickerCalendar.js
+│
+│   # ⏳ PENDING MIGRATION (currently in screens/ and utils/):
+│   # - attendance/ (screens: EmployeeDashboard, AttendanceHistory, ManualAttendanceScreen)
+│   # - tickets/ (screens: TicketScreen, TicketManagementScreen)
+│   # - leave/ (screens: LeaveRequestScreen)
+│   # - employees/ (screens: EmployeeManagement, CreateUserScreen, SignupApprovalScreen)
+│   # - notifications/ (screens: NotificationsScreen)
+│   # - analytics/ (screens: AdminDashboard, HRDashboard)
 │
 ├── shared/                         # Shared code across features
 │   ├── components/                 # Reusable UI components
@@ -135,11 +63,51 @@ AttendanceApp/
 │   │   └── routes.js
 │   └── types/                      # Type definitions (JSDoc)
 │
-├── screens/                        # Legacy screens (to be migrated)
+├── screens/                        # ⚠️ Legacy screens (CURRENTLY IN USE - to be migrated)
+│   ├── LoginScreen.js             # Auth screen (legacy)
+│   ├── SignUpScreen.js            # Auth screen (legacy)
+│   ├── EmployeeDashboard.js       # Attendance screen (legacy)
+│   ├── AdminDashboard.js          # Analytics screen (legacy)
+│   ├── HRDashboard.js             # Analytics screen (legacy)
+│   ├── AttendanceHistory.js       # Attendance screen (legacy)
+│   ├── AuthenticationScreen.js    # Auth screen (legacy)
+│   ├── AuthMethodSelection.js     # Auth screen (legacy)
+│   ├── LeaveRequestScreen.js      # Leave screen (legacy)
+│   ├── CalendarScreen.js          # Calendar screen (legacy)
+│   ├── ThemeSettingsScreen.js     # Settings screen (legacy)
+│   ├── NotificationsScreen.js     # Notifications screen (legacy)
+│   ├── TicketScreen.js            # Tickets screen (legacy)
+│   ├── TicketManagementScreen.js  # Tickets screen (legacy)
+│   ├── ManualAttendanceScreen.js  # Attendance screen (legacy)
+│   ├── EmployeeManagement.js      # Employees screen (legacy)
+│   ├── CreateUserScreen.js        # Employees screen (legacy)
+│   └── SignupApprovalScreen.js    # Employees screen (legacy)
 │
-├── utils/                          # Legacy utils (to be migrated)
+├── utils/                          # ⚠️ Legacy utils (CURRENTLY IN USE - to be migrated)
+│   ├── auth.js                    # Auth utils (legacy - use features/auth instead)
+│   ├── employees.js               # Employee utils (legacy)
+│   ├── ticketManagement.js        # Ticket utils (legacy)
+│   ├── leaveManagement.js         # Leave utils (legacy)
+│   ├── notifications.js           # Notification utils (legacy)
+│   ├── analytics.js               # Analytics utils (legacy)
+│   ├── calendar.js                # Calendar utils (legacy)
+│   ├── location.js                # Location utils (legacy)
+│   ├── export.js                  # Export utils (legacy)
+│   ├── storage.js                 # Storage utils (legacy - use core/services/storage)
+│   ├── responsive.js              # Responsive utils (legacy - use shared/utils/responsive)
+│   ├── biometricAuth.js           # Biometric utils (legacy - use features/auth/utils)
+│   ├── authPreferences.js         # Auth preferences (legacy - use features/auth/utils)
+│   ├── faceVerification.js        # Face verification (legacy)
+│   ├── signupRequests.js          # Signup utils (legacy)
+│   ├── workModes.js               # Work mode utils (legacy - use shared/constants/workModes)
+│   ├── hrRoles.js                 # HR roles utils (legacy)
+│   └── expoGoDetection.js         # Expo Go detection (legacy)
 │
-├── components/                     # Legacy components (to be migrated)
+├── components/                     # ⚠️ Legacy components (CURRENTLY IN USE - to be migrated)
+│   ├── CustomDrawer.js            # Drawer component (legacy - use shared/components)
+│   ├── Logo.js                    # Logo component (legacy - use shared/components)
+│   ├── Trademark.js               # Trademark component (legacy - use shared/components)
+│   └── DatePickerCalendar.js      # Calendar component (legacy - use features/calendar)
 │
 ├── scripts/                        # Build and deployment scripts
 │   └── migrate-users-to-firebase.mjs
@@ -184,12 +152,82 @@ Each feature is self-contained with:
 - CI/CD workflows in `.github/workflows/`
 - Documentation in `docs/`
 
+## Current Migration Status
+
+### ✅ Completed
+- **Core Infrastructure**: `core/` directory fully implemented
+  - ✅ Firebase configuration (`core/config/firebase.js`)
+  - ✅ Context providers (`core/contexts/AuthContext.js`, `ThemeContext.js`)
+  - ✅ Navigation setup (`core/navigation/`)
+  - ✅ Storage service (`core/services/storage.js`)
+- **Shared Code**: `shared/` directory fully implemented
+  - ✅ Shared components (`shared/components/`)
+  - ✅ Shared constants (`shared/constants/`)
+  - ✅ Shared utilities (`shared/utils/`)
+- **Partial Feature Migration**:
+  - ✅ `features/auth/` - Auth service and utilities migrated
+  - ✅ `features/calendar/` - Calendar component migrated
+  - ⚠️ Auth screens still in `screens/` (LoginScreen, SignUpScreen, etc.)
+  - ⚠️ Calendar screen still in `screens/CalendarScreen.js`
+
+### 🔄 In Progress
+- **Feature Modules**: Most features still need migration
+  - ⏳ Attendance feature (screens in `screens/`, utils in `utils/`)
+  - ⏳ Tickets feature (screens in `screens/`, utils in `utils/`)
+  - ⏳ Leave feature (screens in `screens/`, utils in `utils/`)
+  - ⏳ Employees feature (screens in `screens/`, utils in `utils/`)
+  - ⏳ Notifications feature (screens in `screens/`, utils in `utils/`)
+  - ⏳ Analytics feature (screens in `screens/`, utils in `utils/`)
+
+### ⏳ Pending
+- Complete feature module migrations
+- Update all imports to use feature modules
+- Remove legacy code from `screens/`, `utils/`, `components/`
+- Create feature `index.js` files for all features
+- Migrate screens to feature directories
+
 ## Migration Strategy
 
-1. **Phase 1**: Create new structure alongside existing code
-2. **Phase 2**: Migrate features one by one
-3. **Phase 3**: Update imports gradually
-4. **Phase 4**: Remove legacy code
+1. **Phase 1**: ✅ Create new structure alongside existing code (COMPLETED)
+2. **Phase 2**: 🔄 Migrate features one by one (IN PROGRESS - auth partially done)
+3. **Phase 3**: ⏳ Update imports gradually (PENDING)
+4. **Phase 4**: ⏳ Remove legacy code (PENDING)
+
+## Current Import Patterns
+
+### ✅ Using New Structure
+```javascript
+// Core contexts
+import { useAuth } from '../core/contexts/AuthContext';
+import { useTheme } from '../core/contexts/ThemeContext';
+
+// Shared constants
+import { ROLES } from '../shared/constants/roles';
+import { WORK_MODES } from '../shared/constants/workModes';
+import { ROUTES } from '../shared/constants/routes';
+
+// Shared components
+import Logo from '../shared/components/Logo';
+import CustomDrawer from '../shared/components/CustomDrawer';
+
+// Auth feature (migrated)
+import { authenticateUser, createUser } from '../features/auth';
+
+// Core services
+import { storage } from '../core/services/storage';
+```
+
+### ⚠️ Still Using Legacy Structure
+```javascript
+// Legacy screens (to be migrated)
+import EmployeeDashboard from '../screens/EmployeeDashboard';
+import AttendanceHistory from '../screens/AttendanceHistory';
+
+// Legacy utils (to be migrated)
+import { checkIn, checkOut } from '../utils/auth';
+import { getEmployees } from '../utils/employees';
+import { createTicket } from '../utils/ticketManagement';
+```
 
 ## Benefits
 
@@ -199,4 +237,12 @@ Each feature is self-contained with:
 4. **Team Collaboration**: Multiple developers can work on different features
 5. **Deployment**: Clear structure for CI/CD pipelines
 6. **Code Reuse**: Shared code in one place
+
+## Notes
+
+- **Navigation**: Currently imports screens from `screens/` directory (legacy)
+- **App.js**: Still imports from `utils/employees` (legacy)
+- **Most screens**: Still located in `screens/` directory (18 screens total)
+- **Most utils**: Still located in `utils/` directory (17 utility files)
+- **Migration is gradual**: New code should use feature modules, legacy code will be migrated over time
 

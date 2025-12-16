@@ -36,21 +36,29 @@ Core infrastructure that the entire app depends on:
 - **`services/`**: Core services (storage abstraction)
 
 #### 2. Features (`features/`)
-Self-contained feature modules:
-- **`auth/`**: Authentication (login, signup, biometric)
-- **`attendance/`**: Attendance tracking (check-in/out, history)
-- **`tickets/`**: Ticket management and routing
-- **`leave/`**: Leave request management
-- **`employees/`**: Employee management
-- **`notifications/`**: Notification system
-- **`calendar/`**: Calendar and events
-- **`analytics/`**: Analytics and dashboards
+Self-contained feature modules (PARTIALLY MIGRATED):
 
-Each feature contains:
-- `screens/` - UI components
-- `services/` - Business logic
-- `utils/` - Feature-specific utilities
-- `index.js` - Public API exports
+**✅ Migrated Features:**
+- **`auth/`**: Authentication service and utilities
+  - `services/authService.js` - Firebase authentication logic
+  - `utils/biometricAuth.js` - Biometric authentication
+  - `utils/authPreferences.js` - Auth preferences
+  - `index.js` - Public API exports
+  - ⚠️ Screens still in `screens/` (LoginScreen, SignUpScreen, AuthenticationScreen, AuthMethodSelection)
+
+- **`calendar/`**: Calendar component
+  - `components/DatePickerCalendar.js` - Calendar picker component
+  - ⚠️ Screen still in `screens/CalendarScreen.js`
+
+**⏳ Pending Migration (currently in `screens/` and `utils/`):**
+- **`attendance/`**: Attendance tracking (screens: EmployeeDashboard, AttendanceHistory, ManualAttendanceScreen)
+- **`tickets/`**: Ticket management (screens: TicketScreen, TicketManagementScreen)
+- **`leave/`**: Leave request management (screens: LeaveRequestScreen)
+- **`employees/`**: Employee management (screens: EmployeeManagement, CreateUserScreen, SignupApprovalScreen)
+- **`notifications/`**: Notification system (screens: NotificationsScreen)
+- **`analytics/`**: Analytics and dashboards (screens: AdminDashboard, HRDashboard)
+
+**Note**: Most screens and utilities are still in legacy `screens/` and `utils/` directories. Migration is ongoing.
 
 #### 3. Shared (`shared/`)
 Reusable code across features:
@@ -69,17 +77,34 @@ Reusable code across features:
 
 ### Import Patterns
 
+#### ✅ New Structure (Use for New Code)
 ```javascript
-// Import from features
-import { authenticateUser } from '../features/auth';
+// Import from features (migrated)
+import { authenticateUser, createUser } from '../features/auth';
 
 // Import from shared
 import { ROLES } from '../shared/constants/roles';
 import { WORK_MODES } from '../shared/constants/workModes';
+import { ROUTES } from '../shared/constants/routes';
+import Logo from '../shared/components/Logo';
 
 // Import from core
 import { useAuth } from '../core/contexts/AuthContext';
+import { useTheme } from '../core/contexts/ThemeContext';
 import { storage } from '../core/services/storage';
+```
+
+#### ⚠️ Legacy Structure (Currently Used - Will Be Migrated)
+```javascript
+// Legacy screens (currently used by navigation)
+import EmployeeDashboard from '../screens/EmployeeDashboard';
+import AttendanceHistory from '../screens/AttendanceHistory';
+
+// Legacy utils (currently used by screens)
+import { checkIn, checkOut } from '../utils/auth';
+import { getEmployees } from '../utils/employees';
+import { createTicket } from '../utils/ticketManagement';
+import { submitLeaveRequest } from '../utils/leaveManagement';
 ```
 
 ### Navigation Structure
@@ -1047,22 +1072,37 @@ Example: testuser,password:testuser123,role:employee
 - **Deployment Guide**: `docs/DEPLOYMENT.md`
 - **Migration Guide**: `docs/MIGRATION_GUIDE.md`
 
-### Code Locations (New Modular Structure)
+### Code Locations (Current Structure)
+
+#### ✅ New Modular Structure (Migrated)
 - **Auth Service**: `features/auth/services/authService.js`
 - **Auth Feature**: `features/auth/index.js`
-- **Employee Utils**: `utils/employees.js` (legacy, being migrated)
-- **Ticket Utils**: `utils/ticketManagement.js` (legacy, being migrated)
+- **Auth Utils**: `features/auth/utils/biometricAuth.js`, `features/auth/utils/authPreferences.js`
+- **Calendar Component**: `features/calendar/components/DatePickerCalendar.js`
 - **Core Auth Context**: `core/contexts/AuthContext.js`
-- **Core Navigation**: `core/navigation/AppNavigator.js`
-- **Shared Constants**: `shared/constants/roles.js`, `shared/constants/workModes.js`
+- **Core Theme Context**: `core/contexts/ThemeContext.js`
+- **Core Navigation**: `core/navigation/AppNavigator.js`, `core/navigation/MainNavigator.js`, `core/navigation/AuthNavigator.js`
+- **Core Storage**: `core/services/storage.js`
+- **Core Firebase Config**: `core/config/firebase.js`
+- **Shared Constants**: `shared/constants/roles.js`, `shared/constants/workModes.js`, `shared/constants/routes.js`
+- **Shared Components**: `shared/components/Logo.js`, `shared/components/Trademark.js`, `shared/components/CustomDrawer.js`
+- **Shared Utils**: `shared/utils/responsive.js`
+
+#### ⚠️ Legacy Code (Currently in Use - Being Migrated)
+- **Legacy Auth Utils**: `utils/auth.js` (use `features/auth` instead)
+- **Legacy Employee Utils**: `utils/employees.js` (to be migrated to `features/employees/`)
+- **Legacy Ticket Utils**: `utils/ticketManagement.js` (to be migrated to `features/tickets/`)
+- **Legacy Leave Utils**: `utils/leaveManagement.js` (to be migrated to `features/leave/`)
+- **Legacy Notification Utils**: `utils/notifications.js` (to be migrated to `features/notifications/`)
+- **Legacy Analytics Utils**: `utils/analytics.js` (to be migrated to `features/analytics/`)
+- **Legacy Calendar Utils**: `utils/calendar.js` (to be migrated to `features/calendar/`)
+- **Legacy Location Utils**: `utils/location.js` (to be migrated to `features/attendance/utils/`)
+- **Legacy Storage**: `utils/storage.js` (use `core/services/storage.js` instead)
+- **Legacy Responsive**: `utils/responsive.js` (use `shared/utils/responsive.js` instead)
+- **Legacy Screens**: All 18 screens in `screens/` directory (to be migrated to respective feature modules)
 
 ### Scripts
 - **Migration Script**: `scripts/migrate-users-to-firebase.mjs`
-
-### Legacy Code (Being Migrated)
-- **Legacy Auth**: `utils/auth.js` (use `features/auth` instead)
-- **Legacy Screens**: `screens/` (being migrated to feature modules)
-- **Legacy Utils**: `utils/` (being migrated to feature modules)
 
 ---
 
@@ -1095,5 +1135,57 @@ For detailed Firebase setup, see `docs/FIREBASE_SETUP.md`.
 
 ---
 
-*Last Updated: 2025-01-02*
+## Current Implementation Status
+
+### What's Actually Implemented
+
+**Core Infrastructure (✅ Complete)**
+- Firebase configuration and initialization
+- Auth and Theme contexts
+- Navigation structure (AppNavigator, AuthNavigator, MainNavigator)
+- Storage abstraction service
+
+**Shared Code (✅ Complete)**
+- Constants (roles, work modes, routes)
+- Shared components (Logo, Trademark, CustomDrawer)
+- Shared utilities (responsive)
+
+**Features (🔄 Partial Migration)**
+- ✅ `features/auth/` - Service and utilities migrated, screens still in `screens/`
+- ✅ `features/calendar/` - Component migrated, screen still in `screens/`
+- ⏳ All other features - Screens and utils still in legacy directories
+
+**Legacy Code (⚠️ Currently in Use)**
+- 18 screens in `screens/` directory
+- 17 utility files in `utils/` directory
+- 4 components in `components/` directory (some duplicated in `shared/components/`)
+
+**Navigation**
+- Currently imports all screens from `screens/` directory
+- Uses legacy paths: `import EmployeeDashboard from '../../screens/EmployeeDashboard'`
+
+**App Entry Point**
+- `App.js` still imports from `utils/employees` (legacy)
+- Uses core contexts and navigation (new structure)
+
+### Migration Progress
+
+- **Phase 1**: ✅ Create new structure (COMPLETED)
+- **Phase 2**: 🔄 Migrate features (IN PROGRESS - 2 features partially migrated)
+- **Phase 3**: ⏳ Update imports (PENDING)
+- **Phase 4**: ⏳ Remove legacy code (PENDING)
+
+### Next Steps for Migration
+
+1. Migrate remaining features to `features/` directory structure
+2. Move screens from `screens/` to respective feature modules
+3. Move utilities from `utils/` to respective feature modules
+4. Create `index.js` files for all feature modules
+5. Update navigation to import from feature modules
+6. Update `App.js` to use feature modules
+7. Remove legacy code after migration is complete
+
+---
+
+*Last Updated: 2025-01-27*
 

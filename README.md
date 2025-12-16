@@ -581,7 +581,120 @@ For issues or questions:
 
 ## 🎯 Version
 
-**Current Version:** 1.2.0
+**Current Version:** 1.3.0
+
+### Latest Updates (2025-12-16) - v1.3.0
+
+#### 🏗️ Architecture Restructuring
+- **Monorepo Structure**: Reorganized codebase into microservices architecture
+  - Created `apps/mobile/` directory - Moved entire Expo app into mobile app directory
+  - Created `services/` directory structure for future microservices:
+    - `services/api-gateway/` - API Gateway service (Express server with health check)
+    - `services/auth-service/` - Authentication service (Express server with auth routes)
+    - `services/attendance-service/` - Placeholder for attendance service
+    - `services/leave-service/` - Placeholder for leave service
+    - `services/ticket-service/` - Placeholder for ticket service
+
+#### 🔌 API Gateway & Auth Service Implementation
+- **API Gateway Service** (`services/api-gateway/`):
+  - Express server running on port 3000
+  - Health check endpoint (`/health`)
+  - Auth routes that forward requests to auth-service
+  - CORS enabled for cross-origin requests
+  - Error handling for service unavailability
+
+- **Auth Service** (`services/auth-service/`):
+  - Express server running on port 3001
+  - Auth API endpoints:
+    - `POST /api/auth/login` - User authentication
+    - `GET /api/auth/check-username/:username` - Username availability check
+    - `POST /api/auth/users` - User creation
+    - `PATCH /api/auth/users/:username/role` - Role updates
+    - `PATCH /api/auth/users/:username` - User info updates
+  - Placeholder implementations (Firebase integration pending)
+
+#### 🔄 Frontend API Integration
+- **Login Flow Updated** (`apps/mobile/utils/auth.js`):
+  - Modified `authenticateUser` function to call API Gateway first
+  - Falls back to Firebase authentication if API Gateway fails
+  - Maintains backward compatibility with existing Firebase login
+  - Added API Gateway configuration (`apps/mobile/core/config/api.js`)
+  - 10-second timeout for API requests
+  - Comprehensive error handling
+
+#### 🐛 Import Errors Fixed
+1. **Missing `mkdirp` Module**:
+   - Error: `Cannot find module 'mkdirp'` from chromium-edge-launcher
+   - Fix: Installed `mkdirp@3.0.1` in chromium-edge-launcher's node_modules
+   - Added to devDependencies in package.json
+
+2. **Missing `@react-navigation/core`**:
+   - Error: `Unable to resolve "@react-navigation/core"`
+   - Fix: Installed `@react-navigation/core@^7.13.6`
+   - Added to dependencies in package.json
+
+3. **Missing `@expo/vector-icons` Vendor Directory**:
+   - Error: `Unable to resolve "./vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf"`
+   - Fix: Reinstalled `@expo/vector-icons` using `npx expo install`
+   - Font files now properly located in `build/vendor/` directory
+
+4. **Missing `@firebase/webchannel-wrapper`**:
+   - Error: `Unable to resolve "@firebase/webchannel-wrapper/bloom-blob"`
+   - Fix: Copied `@firebase` packages from root node_modules
+   - Updated Metro config to enable package exports
+
+5. **Missing `firebase/auth` Module**:
+   - Error: `Unable to resolve "firebase/auth"`
+   - Fix: Copied Firebase package from root node_modules
+   - Verified Firebase auth and firestore modules exist
+
+6. **Missing `idb` Package**:
+   - Error: `Unable to resolve "idb"` from `@firebase/app`
+   - Fix: Copied `idb` package from root node_modules
+   - Created Metro shim (`metro-idb-shim.js`) for React Native compatibility
+   - Updated Metro config to use shim for browser-only packages
+
+#### ⚙️ Metro Bundler Configuration Updates
+- **Updated `apps/mobile/metro.config.js`**:
+  - Added font file extensions (ttf, otf, woff, woff2)
+  - Added source extensions (mjs, cjs)
+  - Enabled package exports (`unstable_enablePackageExports = true`)
+  - Added custom resolver for `idb` package shim
+  - Proper error handling in resolver
+
+#### 📦 Dependencies Added
+- `@react-navigation/core@^7.13.6` - Navigation core library
+- `mkdirp@^3.0.1` - Directory creation utility
+- `idb@^8.0.0` - IndexedDB wrapper (for Firebase compatibility)
+- `@firebase/webchannel-wrapper` - Firebase webchannel support
+- Express, CORS, dotenv, axios, http-proxy-middleware (for services)
+
+#### 📁 Files Created
+- `apps/mobile/core/config/api.js` - API Gateway configuration
+- `apps/mobile/metro-idb-shim.js` - Empty shim for idb package
+- `services/api-gateway/index.js` - API Gateway Express server
+- `services/api-gateway/routes/auth.js` - Auth route handlers
+- `services/auth-service/index.js` - Auth service Express server
+- `services/auth-service/routes/auth.js` - Auth API endpoints
+
+#### 📝 Files Modified
+- `apps/mobile/utils/auth.js` - Updated login to use API Gateway with Firebase fallback
+- `apps/mobile/metro.config.js` - Enhanced Metro configuration
+- `apps/mobile/package.json` - Added new dependencies
+- All app files moved to `apps/mobile/` directory
+
+#### ⚠️ Known Issues
+- npm install failing with "Invalid Version" error (workaround: copying packages from root node_modules)
+- Some packages manually copied due to npm installation issues
+- API Gateway and Auth Service are placeholders (Firebase integration pending)
+
+#### 🔄 Migration Status
+- ✅ App moved to `apps/mobile/` directory
+- ✅ API Gateway service created
+- ✅ Auth service created
+- ✅ Frontend login updated to use API Gateway
+- ⏳ Firebase integration in auth-service (pending)
+- ⏳ Complete microservices migration (pending)
 
 ### Recent Updates (v1.2.0)
 - ✅ Added Super Admin and Manager role system
@@ -601,8 +714,20 @@ For issues or questions:
 - ✅ Calendar integration for half-day leaves
 - ✅ HR Dashboard support for half-day leave tracking
 
-## 📚 Additional Resources
+## 📚 Documentation
 
+### Complete Feature Documentation
+For a comprehensive overview of all app features, capabilities, and what each role can do, see:
+- **[Complete App Features Documentation](docs/APP_FEATURES.md)** - Detailed feature list, role permissions, use cases, and more
+
+### Additional Documentation
+- [Modular Architecture Guide](docs/MODULAR_ARCHITECTURE.md) - Architecture and code organization
+- [System Architecture](docs/SYSTEM_ARCHITECTURE.md) - System design and user management
+- [Firebase Setup Guide](docs/FIREBASE_SETUP.md) - Firebase configuration instructions
+- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration instructions
+- [Deployment Guide](docs/DEPLOYMENT.md) - Deployment procedures
+
+### External Resources
 - [Expo Documentation](https://docs.expo.dev/)
 - [React Native Documentation](https://reactnative.dev/)
 - [React Navigation](https://reactnavigation.org/)

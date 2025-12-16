@@ -2,18 +2,77 @@
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { API_GATEWAY_URL, API_TIMEOUT } from '../core/config/api';
 
 // Firebase-based authentication - no file storage needed
 
 /**
- * Authenticate user with Firebase
+ * Authenticate user - tries API Gateway first, falls back to Firebase
  * Supports both username and email login
  * @param {string} usernameOrEmail - Username or email to authenticate
  * @param {string} password - Password to authenticate
  * @returns {Promise<{success: boolean, user?: {username: string, role: string}}>}
  */
 export const authenticateUser = async (usernameOrEmail, password) => {
+  // First, try API Gateway
   try {
+    console.log('Attempting authentication via API Gateway...');
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+    
+    const response = await fetch(`${API_GATEWAY_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        usernameOrEmail: usernameOrEmail.trim(),
+        password: password,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    const data = await response.json();
+    
+    // If API Gateway returns success, use it
+    if (response.ok && data.success) {
+      console.log('✓ Authentication successful via API Gateway for:', data.user?.username || usernameOrEmail);
+      return {
+        success: true,
+        user: {
+          username: data.user?.username || usernameOrEmail.split('@')[0],
+          role: data.user?.role || 'employee',
+          uid: data.user?.uid || '',
+          email: data.user?.email || usernameOrEmail,
+        },
+      };
+    }
+    
+    // If API Gateway returns an error (but not a service error), fallback to Firebase
+    if (response.status !== 503 && response.status !== 504) {
+      console.log('API Gateway returned error, falling back to Firebase:', data.error || 'Unknown error');
+      // Continue to Firebase fallback below
+    } else {
+      // Service unavailable, fallback to Firebase
+      console.log('API Gateway unavailable, falling back to Firebase');
+      // Continue to Firebase fallback below
+    }
+  } catch (error) {
+    // API Gateway call failed (network error, timeout, etc.), fallback to Firebase
+    if (error.name === 'AbortError') {
+      console.log('API Gateway request timed out, falling back to Firebase');
+    } else {
+      console.log('API Gateway request failed, falling back to Firebase:', error.message);
+    }
+    // Continue to Firebase fallback below
+  }
+  
+  // Fallback to Firebase authentication (existing logic)
+  try {
+    console.log('Attempting authentication via Firebase...');
     let email = usernameOrEmail;
     
     // Check if input is a username (not an email)
@@ -52,7 +111,7 @@ export const authenticateUser = async (usernameOrEmail, password) => {
       return { success: false, error: 'User data not found' };
     }
     
-    console.log('✓ Authentication successful for:', userData.username || email, 'with role:', userData.role);
+    console.log('✓ Authentication successful via Firebase for:', userData.username || email, 'with role:', userData.role);
     return {
       success: true,
       user: {
@@ -63,7 +122,7 @@ export const authenticateUser = async (usernameOrEmail, password) => {
       }
     };
   } catch (error) {
-    console.error('Authentication error:', error);
+    console.error('Firebase authentication error:', error);
     let errorMessage = 'Invalid username or password';
     
     switch (error.code) {

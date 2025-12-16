@@ -19,25 +19,30 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
+        cache-dependency-path: apps/mobile/package-lock.json
         
     - name: Install dependencies
+      working-directory: ./apps/mobile
       run: npm ci
       
     - name: Run linter
+      working-directory: ./apps/mobile
       run: npm run lint || true
       
     - name: Check code formatting
+      working-directory: ./apps/mobile
       run: npm run format:check || true
       
     - name: Build Android
+      working-directory: ./apps/mobile
       run: |
         npm run android:build || echo "Android build skipped"
       env:
         EXPO_PUBLIC_ENV: production
         
     - name: Build iOS
+      working-directory: ./apps/mobile
       run: |
         npm run ios:build || echo "iOS build skipped"
       env:
         EXPO_PUBLIC_ENV: production
-
